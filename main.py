@@ -10,6 +10,7 @@ import anyio
 import asyncio
 from pydantic import BaseModel
 from collections import defaultdict
+import traceback
 
 from fastapi import FastAPI, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -130,16 +131,20 @@ def _set_progress(job_id, progress=None, state=None, message=None):
 
 async def hist_pipeline(job_id):
 
-    steps   = 6
-    curr    = 0
+    steps       = 6
+    curr        = 0
+    total_time  = 0
+    logs        = []
 
     try:
         _set_progress(job_id, progress=0, message=":material/database: Querying MySQL")
         start = time.perf_counter()
-        df      = await anyio.to_thread.run_sync(lambda: db.query_to_dataframe(sql=HISTORICAL))
-        curr    += 1
+        df = await anyio.to_thread.run_sync(lambda: db.query_to_dataframe(sql=HISTORICAL))
+        curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: Queried {len(df)} rows, {len(df.columns)} columns in {end-start} seconds"
+        total_time += end - start
+        message = f":material/done_outline: Queried {len(df)} rows, {len(df.columns)} columns in {end-start:.2f} seconds"
+        logs.append(message)
         _set_progress(job_id, progress=round((curr/steps)*100), message=message)
 
         _set_progress(job_id, message=":material/cloud_download: Downloading .gz links")
@@ -147,7 +152,9 @@ async def hist_pipeline(job_id):
         uc_results, fhr_results = await async_process_urls(df)
         curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: Downloaded {len(uc_results)} .gz links in {end - start} seconds"
+        total_time += end - start
+        message = f":material/done_outline: Downloaded {len(uc_results)} .gz links in {end-start:.2f} seconds"
+        logs.append(message)
         _set_progress(job_id, progress=round((curr/steps)*100), message=message)
 
         _set_progress(job_id, message=":material/conveyor_belt: Processing data (1)")
@@ -155,15 +162,21 @@ async def hist_pipeline(job_id):
         processed_list_1, skipped_1 = await anyio.to_thread.run_sync(lambda: process_data_1(df, uc_results, fhr_results))
         curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: {skipped_1} rows filtered in {end-start} seconds\n{len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining"
+        total_time += end - start
+        message = f":material/done_outline: {skipped_1} rows filtered in {end-start:.2f} seconds ({len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining)"
+        logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
+
+        rows_added_raw = len(processed_list_1) - await mongo.count_documents("raw_data")
 
         _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (raw_data)")
         start = time.perf_counter()
         await mongo.upsert_records(processed_list_1, "raw_data")
         curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: Uploaded to MongoDB (raw_data) in {end - start} seconds"
+        total_time += end - start
+        message = f":material/done_outline: Uploaded {rows_added_raw} rows to MongoDB (raw_data) in {end-start:.2f} seconds"
+        logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         _set_progress(job_id, message=":material/conveyor_belt: Processing data (2)")
@@ -171,19 +184,54 @@ async def hist_pipeline(job_id):
         processed_list_2, skipped_2 = await anyio.to_thread.run_sync(lambda: process_data_2(processed_list_1))
         curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: {skipped_2} rows filtered in {end-start} seconds\n{len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining"
+        total_time += end - start
+        message = f":material/done_outline: {skipped_2} rows filtered in {end-start:.2f} seconds ({len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining)"
+        logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
+
+        rows_added_processed = len(processed_list_2) - await mongo.count_documents("processed_data")
 
         _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (processed_data)")
         start = time.perf_counter()
         await mongo.upsert_records(processed_list_2, "processed_data")
         curr += 1
         end = time.perf_counter()
-        message = f":material/done_outline: Uploaded to MongoDB (processed_data) in {end - start} seconds"
-        _set_progress(job_id, progress=round((curr / steps) * 100), message=message, state="completed")
+        total_time += end - start
+        message = f":material/done_outline: Uploaded {rows_added_processed} rows to MongoDB (processed_data) in {end-start:.2f} seconds"
+        logs.append(message)
+        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
+
+        logging = {
+            "job_id"                : job_id,
+            "date"                  : datetime.now().isoformat(),
+            "status"                : "completed",
+            "rows_retrieved"        : len(df),
+            "rows_added_raw"        : rows_added_raw,
+            "rows_added_processed"  : rows_added_processed,
+            "total_time"            : total_time,
+            "logs"                  : logs
+        }
+
+        await mongo.upsert_records(logging, "logs")
+        message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time:.2f} seconds"
+        _set_progress(job_id, message=message, state="completed")
 
     except Exception as e:
-        _set_progress(job_id, message=e, state="failed")
-        print(e)
-        import traceback
-        traceback.print_exc()
+
+        message = f":material/error: Pipeline encountered an error when running\n{"".join(traceback.format_exception(type(e), e, e.__traceback__))}"
+        _set_progress(job_id, message=message, state="failed")
+
+        logging = {
+            "job_id"        : job_id,
+            "date"          : datetime.now().isoformat(),
+            "status"        : "failed",
+            "error"         : message,
+            "total_time"    : total_time,
+            "logs"          : logs
+        }
+
+        await mongo.upsert_records(logging, "logs")
+        message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time} seconds"
+        _set_progress(job_id, message=message)
+
+        print(message)

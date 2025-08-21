@@ -55,20 +55,39 @@ class MongoDBConnector:
 
         async with self.resource(coll_name) as coll:
 
-            ops = []
+            if coll_name == "logs":
 
-            for item in records:
+                _id = records.get("job_id")
+                to_insert = dict(records)
+                to_insert.pop("job_id")
 
-                _id = item.get("row_id")
-                to_insert = dict(item)
-                to_insert.pop("row_id")
+                to_insert = UpdateOne({"_id": _id}, {"$set": to_insert}, upsert=True)
+                await self.flush(coll, [to_insert])
 
-                to_insert.setdefault("fetched_at", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-                ops.append(UpdateOne({"_id": _id}, {"$set": to_insert}, upsert=True))
+            else:
 
-                if len(ops) >= batch_size:
+                ops = []
+
+                for item in records:
+
+                    _id = item.get("row_id")
+                    to_insert = dict(item)
+                    to_insert.pop("row_id")
+
+                    to_insert.setdefault("fetched_at", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+                    ops.append(UpdateOne({"_id": _id}, {"$set": to_insert}, upsert=True))
+
+                    if len(ops) >= batch_size:
+                        await self.flush(coll, ops)
+                        ops = []
+
+                if ops:
                     await self.flush(coll, ops)
-                    ops = []
 
-            if ops:
-                await self.flush(coll, ops)
+    async def count_documents(self, coll_name, count_filter=None):
+
+        async with self.resource(coll_name) as coll:
+
+            count = await coll.count_documents(count_filter or {})
+
+            return count

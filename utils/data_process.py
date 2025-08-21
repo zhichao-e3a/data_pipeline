@@ -4,15 +4,18 @@ import pandas as pd
 from datetime import datetime
 from scipy.signal import butter, filtfilt
 
-def process_data_1(df, uc_list, fhr_list):
+def process_data_1(df, unsorted_uc_list, unsorted_fhr_list):
 
     processed_list = []
     skipped = 0
 
+    uc_list     = sorted(unsorted_uc_list, key=lambda x: x[0])
+    fhr_list    = sorted(unsorted_fhr_list, key=lambda x: x[0])
+
     for idx, row in df.iterrows():
 
-        uc  = uc_list[idx].split("\n")
-        fhr = fhr_list[idx].split("\n")
+        uc  = uc_list[idx][1].split("\n")
+        fhr = fhr_list[idx][1].split("\n")
 
         if len(uc) < 60*20 and len(fhr) < 60*20:
             skipped += 1

@@ -70,9 +70,13 @@ class MongoDBConnector:
 
                 for item in records:
 
-                    _id = item.get("row_id")
                     to_insert = dict(item)
-                    to_insert.pop("row_id")
+
+                    if "row_id" in item:
+                        _id = item.get("row_id")
+                        to_insert.pop("row_id")
+                    else:
+                        _id = item.get("id")
 
                     to_insert.setdefault("fetched_at", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
                     ops.append(UpdateOne({"_id": _id}, {"$set": to_insert}, upsert=True))
@@ -91,3 +95,20 @@ class MongoDBConnector:
             count = await coll.count_documents(count_filter or {})
 
             return count
+
+    async def get_all_documents(self, coll_name, projection=None, batch_size=1000):
+
+        async with self.resource(coll_name) as coll:
+
+            try:
+                cursor = coll.find({})
+                if batch_size:
+                    cursor = cursor.batch_size(batch_size)
+                return [doc async for doc in cursor]
+
+            except AutoReconnect:
+                await asyncio.sleep(0.5)
+                cursor = coll.find({}, projection)
+                if batch_size:
+                    cursor = cursor.batch_size(batch_size)
+                return [doc async for doc in cursor]

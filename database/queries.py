@@ -56,7 +56,7 @@ origin_data_record AS r              -- extant_future_data.origin_data_record
 ON uu.id = r.user_id
 AND r.hb_baby_url <> ''
 AND r.contraction_url <> ''
-AND uu.mobile IN ('XXX')
-AND r.start_ts BETWEEN UNIX_TIMESTAMP('{start}') AND UNIX_TIMESTAMP('{end}')
+AND uu.mobile IN ({numbers})
+AND r.start_ts BETWEEN UNIX_TIMESTAMP({start}) AND UNIX_TIMESTAMP({end})
 ;
 """

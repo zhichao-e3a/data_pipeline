@@ -22,11 +22,10 @@ def process_data_1(df, unsorted_uc_list, unsorted_fhr_list, data_type):
             print(f"Process DF: Skipped row {idx}")
             continue
 
+        add = row["end_born_ts"]
+
         edd = row["expected_born_date"]
         edd_dt = datetime(edd.year, edd.month, edd.day) if not pd.isna(edd) else None
-
-        add = row["end_born_ts"]
-        add_dt = datetime(add.year, add.month, add.day) if not pd.isna(add) else None
 
         data = {
             "mobile"            : row["mobile"],
@@ -37,12 +36,14 @@ def process_data_1(df, unsorted_uc_list, unsorted_fhr_list, data_type):
             "uc"                : uc,
             "fhr"               : fhr,
             "expected_delivery" : edd_dt,
-            "actual_delivery"   : add_dt,
+            "actual_delivery"   : add,
             "onset"             : None
         }
 
         if data_type == "rec":
-            data["onset"] = row["onset"] if not pd.isna(row["onset"]) else None
+            add_dt                  = datetime(add.year, add.month, add.day) if not pd.isna(add) else None
+            data["actual_delivery"] = add_dt
+            data["onset"]           = row["onset"] if not pd.isna(row["onset"]) else None
 
         conclusion      = row["conclusion"]
         basic_info      = row["basic_info"]

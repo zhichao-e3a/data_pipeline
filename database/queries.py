@@ -2,21 +2,13 @@ HISTORICAL = """
 SELECT
 uu.mobile,
 r.id,
-r.user_id,
-r.psn,
-FROM_UNIXTIME(r.start_ts, '%%Y-%%m-%%d %%H:%%i:%%s') AS start_ts,
-CASE 
-WHEN r.start_test_ts = 0 THEN '0'
-ELSE FROM_UNIXTIME(r.start_test_ts, '%%Y-%%m-%%d %%H:%%i:%%s')
-END AS start_test_ts,
+start_ts,
+r.contraction_url,
 r.hb_baby_url,
-r.hb_sound_url,
 r.basic_info,
 r.conclusion,
-r.ctime,
-r.contraction_url,
 tt.expected_born_date,
-FROM_UNIXTIME(tt.end_born_ts, '%%Y-%%m-%%d %%H:%%i:%%s') AS end_born_ts
+tt.end_born_ts
 FROM
 extant_future_user.user AS uu                -- extant_future_user.user
 INNER JOIN
@@ -36,19 +28,11 @@ RECRUITED = """
 SELECT
 uu.mobile,
 r.id,
-r.user_id,
-r.psn,
-FROM_UNIXTIME(r.start_ts, '%%Y-%%m-%%d %%H:%%i:%%s') AS start_ts,
-CASE 
-WHEN r.start_test_ts = 0 THEN '0'
-ELSE FROM_UNIXTIME(r.start_test_ts, '%%Y-%%m-%%d %%H:%%i:%%s')
-END AS start_test_ts,
+start_ts,
+r.contraction_url,
 r.hb_baby_url,
-r.hb_sound_url,
 r.basic_info,
-r.conclusion,
-r.ctime,
-r.contraction_url
+r.conclusion
 FROM
 extant_future_user.user AS uu        -- extant_future_user.user
 INNER JOIN

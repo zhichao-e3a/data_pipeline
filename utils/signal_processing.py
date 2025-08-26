@@ -2,6 +2,42 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, filtfilt
 
+def process_signals(data_list):
+
+    processed_list = []
+    skipped = 0
+
+    for idx, row in enumerate(data_list):
+
+        uc, fhr = row['uc'], row['fhr']
+        max_len = max(len(uc), len(fhr))
+
+        while len(uc) < max_len:
+            uc.append("")
+        while len(fhr) < max_len:
+            fhr.append("")
+
+        uc_truncated, fhr_truncated = uc[45:], fhr[45:]
+        uc_raw  = [float(i) if i not in ("", None) else np.nan for i in uc_truncated]
+        fhr_raw = [float(i) if i not in ("", None) else np.nan for i in fhr_truncated]
+
+        uc_cleaned  = clean_uc_signal(uc_raw)
+        fhr_cleaned = clean_fhr_signal(fhr_raw)
+
+        uc_final    = [float(u) for u in uc_cleaned if not np.isnan(u)]
+        fhr_final   = [float(f) for f in fhr_cleaned if not np.isnan(f)]
+
+        if not uc_final or not fhr_final:
+            skipped += 1
+            continue
+
+        row['uc']   = uc_final
+        row['fhr']  = fhr_final
+
+        processed_list.append(row)
+
+    return processed_list, skipped
+
 def linear_interpolate_nan(arr, max_gap_length=15):
 
     arr_copy = arr.copy()

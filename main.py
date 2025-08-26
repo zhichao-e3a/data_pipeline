@@ -1,8 +1,9 @@
-from database.queries import HISTORICAL
+from database.queries import HISTORICAL, RECRUITED
 from database.SQLDBConnector import SQLDBConnector
 from database.MongoDBConnector import MongoDBConnector
 from utils.data_download import *
 from utils.data_process import *
+from utils.signal_processing import *
 
 import time
 import uuid
@@ -43,6 +44,7 @@ app.add_middleware(
 )
 
 PROGRESS            = {}
+CANCELLED           = set()
 subscribers         = defaultdict(set)
 
 class ResponseModel(BaseModel):
@@ -120,136 +122,30 @@ def _set_progress(job_id, progress=None, state=None, message=None):
     # Push update to client
     _emit(job_id, {"type": "status", "job_id": job_id, **st})
 
-@app.post("/run_rec_pipeline", response_model=ResponseModel, status_code=202)
-async def run_rec_pipeline(background_tasks: BackgroundTasks):
+@app.post("/cancel/{job_id}")
+async def cancel_pipeline(job_id: str):
+
+    CANCELLED.add(job_id)
+    _set_progress(job_id, state="cancelled", message=":material/cancel: Cancellation requested")
+
+    return {"job_id": job_id, "status": "cancelling"}
+
+def _check_cancel(job_id):
+
+    if job_id in CANCELLED:
+
+        raise asyncio.CancelledError(f"Pipeline {job_id} was cancelled")
+
+@app.post("/run_pipeline/{data_origin}", response_model=ResponseModel, status_code=202)
+async def run_pipeline(background_tasks: BackgroundTasks, data_origin: str):
 
     job_id = uuid.uuid4().hex
     PROGRESS[job_id] = {"progress": 0, "state": "running", "message": "Starting…"}
-    background_tasks.add_task(rec_pipeline, job_id)
+    background_tasks.add_task(pipeline, job_id, data_origin)
 
     return {"job_id": job_id}
 
-async def rec_pipeline(job_id):
-
-    steps       = 7
-    curr        = 1
-    total_time  = 0
-    logs        = []
-
-    try:
-        # (2) Query merged data from MongoDB
-        _set_progress(job_id, progress=0, message=":material/database: Querying MongoDB")
-        start = time.perf_counter()
-        merged_df = pd.DataFrame(await mongo.get_all_documents("rec_merged_data"))
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: Queried {len(merged_df)} rows, {len(merged_df.columns)} columns in {end - start:.2f} seconds"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr/steps)*100), message=message)
-
-        # (3) Download gz links
-        _set_progress(job_id, message=":material/cloud_download: Downloading .gz links")
-        start = time.perf_counter()
-        uc_results, fhr_results = await async_process_urls(merged_df)
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: Downloaded {len(uc_results)} .gz links in {end-start:.2f} seconds"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr/steps)*100), message=message)
-
-        # (4) Process data 1
-        _set_progress(job_id, message=":material/conveyor_belt: Processing data (1)")
-        start = time.perf_counter()
-        processed_list_1, skipped_1 = await anyio.to_thread.run_sync(lambda: process_data_1(merged_df, uc_results, fhr_results, data_type="rec"))
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: {skipped_1} rows filtered in {end-start:.2f} seconds ({len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining)"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
-
-        # (5) Upload to MongoDB (rec_raw_data)
-        rows_added_raw = len(processed_list_1) - await mongo.count_documents("rec_raw_data")
-        _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (rec_raw_data)")
-        start = time.perf_counter()
-        await mongo.upsert_records(processed_list_1, "rec_raw_data")
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_raw} rows to MongoDB (rec_raw_data) in {end-start:.2f} seconds"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
-
-        # (6) Process data 2
-        _set_progress(job_id, message=":material/conveyor_belt: Processing data (2)")
-        start = time.perf_counter()
-        processed_list_2, skipped_2 = await anyio.to_thread.run_sync(lambda: process_data_2(processed_list_1))
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: {skipped_2} rows filtered in {end-start:.2f} seconds ({len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining)"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
-
-        # (7) Upload to MongoDB (rec_processed_data)
-        rows_added_processed = len(processed_list_2) - await mongo.count_documents("rec_processed_data")
-        _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (rec_processed_data)")
-        start = time.perf_counter()
-        await mongo.upsert_records(processed_list_2, "rec_processed_data")
-        end = time.perf_counter()
-        curr += 1
-        total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_processed} rows to MongoDB (rec_processed_data) in {end-start:.2f} seconds"
-        logs.append(message)
-        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
-
-        logging = {
-            "job_id"                : job_id,
-            "type"                  : "recruited",
-            "date"                  : datetime.now().isoformat(),
-            "status"                : "completed",
-            "rows_retrieved"        : len(merged_df),
-            "rows_added_raw"        : rows_added_raw,
-            "rows_added_processed"  : rows_added_processed,
-            "total_time"            : total_time,
-            "logs"                  : logs
-        }
-
-        await mongo.upsert_records(logging, "logs")
-        message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time:.2f} seconds"
-        _set_progress(job_id, message=message, state="completed")
-
-    except Exception as e:
-
-        message = f":material/error: Pipeline encountered an error when running\n{"".join(traceback.format_exception(type(e), e, e.__traceback__))}"
-        _set_progress(job_id, message=message, state="failed")
-
-        logging = {
-            "job_id"        : job_id,
-            "type"          : "recruited",
-            "date"          : datetime.now().isoformat(),
-            "status"        : "failed",
-            "error"         : message,
-            "total_time"    : total_time,
-            "logs"          : logs
-        }
-
-        await mongo.upsert_records(logging, "logs")
-        message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time} seconds"
-        _set_progress(job_id, message=message)
-
-@app.post("/run_hist_pipeline", response_model=ResponseModel, status_code=202)
-async def run_hist_pipeline(background_tasks: BackgroundTasks):
-
-    job_id = uuid.uuid4().hex
-    PROGRESS[job_id] = {"progress": 0, "state": "running", "message": "Starting…"}
-    background_tasks.add_task(hist_pipeline, job_id)
-
-    return {"job_id": job_id}
-
-async def hist_pipeline(job_id):
+async def pipeline(job_id, data_origin):
 
     steps       = 6
     curr        = 0
@@ -257,71 +153,126 @@ async def hist_pipeline(job_id):
     logs        = []
 
     try:
-        _set_progress(job_id, progress=0, message=":material/database: Querying MySQL")
+        _check_cancel(job_id)
+
+        _set_progress(job_id, progress=0, message=":material/database: Querying MySQL database")
+
         start = time.perf_counter()
-        df = await anyio.to_thread.run_sync(lambda: db.query_to_dataframe(sql=HISTORICAL))
+
+        if data_origin == "rec":
+            merged_df = await mongo.get_all_documents("consolidated_patients")
+            query_string = ",".join([f"'{i["_id"]}'" for i in merged_df])
+            df = await anyio.to_thread.run_sync(
+                lambda: db.query_to_dataframe(
+                    sql=RECRUITED.format(
+                        start="'2025-03-01 00:00:00'",
+                        end=f"'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'",
+                        numbers=query_string
+                    )
+                )
+            )
+        else:
+            df = await anyio.to_thread.run_sync(lambda: db.query_to_dataframe(sql=HISTORICAL))
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Queried {len(df)} rows, {len(df.columns)} columns in {end-start:.2f} seconds"
+        message = f":material/done_outline: Queried {len(df)} rows, {len(df.columns)} columns in {end - start:.2f} seconds"
         logs.append(message)
-        _set_progress(job_id, progress=round((curr/steps)*100), message=message)
+        _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
+
+        _check_cancel(job_id)
 
         _set_progress(job_id, message=":material/cloud_download: Downloading .gz links")
+
         start = time.perf_counter()
+
         uc_results, fhr_results = await async_process_urls(df)
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Downloaded {len(uc_results)} .gz links in {end-start:.2f} seconds"
+        message = f":material/done_outline: Downloaded {len(uc_results)} (x2) .gz links in {end-start:.2f} seconds"
         logs.append(message)
         _set_progress(job_id, progress=round((curr/steps)*100), message=message)
 
-        _set_progress(job_id, message=":material/conveyor_belt: Processing data (1)")
+        _check_cancel(job_id)
+
+        _set_progress(job_id, message=":material/conveyor_belt: Processing data")
+
         start = time.perf_counter()
-        processed_list_1, skipped_1 = await anyio.to_thread.run_sync(lambda: process_data_1(df, uc_results, fhr_results, data_type="hist"))
+
+        processed_list_1, skipped_1 = await anyio.to_thread.run_sync(
+            lambda: process_data(df, uc_results, fhr_results, data_origin)
+        )
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: {skipped_1} rows filtered in {end-start:.2f} seconds ({len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining)"
+        message = f":material/done_outline: {len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining ({skipped_1} rows filtered in {end-start:.2f} seconds)"
         logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
-        rows_added_raw = len(processed_list_1) - await mongo.count_documents("hist_raw_data")
-        _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (hist_raw_data)")
+        _check_cancel(job_id)
+
+        coll_name = "rec_raw_data" if data_origin == "rec" else "hist_raw_data"
+        _set_progress(job_id, message=f":material/database_upload: Uploading to MongoDB ({coll_name})")
+
         start = time.perf_counter()
-        await mongo.upsert_records(processed_list_1, "hist_raw_data")
+
+        rows_added_raw = len(processed_list_1) - await mongo.count_documents(coll_name)
+        await mongo.upsert_records(processed_list_1, coll_name)
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_raw} rows to MongoDB (hist_raw_data) in {end-start:.2f} seconds"
+        message = f":material/done_outline: Uploaded {rows_added_raw} rows to MongoDB ({coll_name}) in {end-start:.2f} seconds"
         logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
-        _set_progress(job_id, message=":material/conveyor_belt: Processing data (2)")
+        _check_cancel(job_id)
+
+        _set_progress(job_id, message=":material/conveyor_belt: Cleaning UC, FHR signals")
+
         start = time.perf_counter()
-        processed_list_2, skipped_2 = await anyio.to_thread.run_sync(lambda: process_data_2(processed_list_1))
+
+        processed_list_2, skipped_2 = await anyio.to_thread.run_sync(
+            lambda: process_signals(processed_list_1)
+        )
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: {skipped_2} rows filtered in {end-start:.2f} seconds ({len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining)"
+        message = f":material/done_outline: {len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining ({skipped_2} rows filtered in {end-start:.2f} seconds)"
         logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
-        rows_added_processed = len(processed_list_2) - await mongo.count_documents("hist_processed_data")
-        _set_progress(job_id, message=":material/database_upload: Uploading to MongoDB (hist_processed_data)")
+        _check_cancel(job_id)
+
+        coll_name = "rec_processed_data" if data_origin == "rec" else "hist_processed_data"
+        _set_progress(job_id, message=f":material/database_upload: Uploading to MongoDB ({coll_name})")
+
         start = time.perf_counter()
-        await mongo.upsert_records(processed_list_2, "hist_processed_data")
+
+        rows_added_processed = len(processed_list_2) - await mongo.count_documents(coll_name)
+        await mongo.upsert_records(processed_list_2, coll_name)
+
         end = time.perf_counter()
+
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_processed} rows to MongoDB (hist_processed_data) in {end-start:.2f} seconds"
+        message = f":material/done_outline: Uploaded {rows_added_processed} rows to MongoDB ({coll_name}) in {end-start:.2f} seconds"
         logs.append(message)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         logging = {
             "job_id"                : job_id,
-            "type"                  : "historical",
+            "type"                  : data_origin,
             "date"                  : datetime.now().isoformat(),
             "status"                : "completed",
             "rows_retrieved"        : len(df),
@@ -331,9 +282,27 @@ async def hist_pipeline(job_id):
             "logs"                  : logs
         }
 
-        await mongo.upsert_records(logging, "logs")
+        await mongo.upsert_records(logging, coll_name="logs")
         message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time:.2f} seconds"
         _set_progress(job_id, message=message, state="completed")
+
+    except asyncio.CancelledError:
+
+        message = f":material/cancel: Pipeline {job_id} cancelled by user"
+        logs.append(message)
+        _set_progress(job_id, message=message, state="cancelled")
+
+        logging = {
+            "job_id"        : job_id,
+            "type"          : data_origin,
+            "date"          : datetime.now().isoformat(),
+            "status"        : "cancelled",
+            "total_time"    : total_time,
+            "logs"          : logs
+        }
+
+        await mongo.upsert_records(logging, coll_name="logs")
+        CANCELLED.discard(job_id)
 
     except Exception as e:
 
@@ -342,7 +311,7 @@ async def hist_pipeline(job_id):
 
         logging = {
             "job_id"        : job_id,
-            "type"          : "historical",
+            "type"          : data_origin,
             "date"          : datetime.now().isoformat(),
             "status"        : "failed",
             "error"         : message,
@@ -350,7 +319,7 @@ async def hist_pipeline(job_id):
             "logs"          : logs
         }
 
-        await mongo.upsert_records(logging, "logs")
+        await mongo.upsert_records(logging, coll_name="logs")
         message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time} seconds"
         _set_progress(job_id, message=message)
 

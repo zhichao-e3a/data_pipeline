@@ -37,10 +37,6 @@ def process_data(df, unsorted_uc_list, unsorted_fhr_list, data_origin):
                 int(row["end_born_ts"])
             ).strftime("%Y-%m-%d %H:%M:%S")
 
-        # elif data_origin == "rec":
-        #
-        #     data["onset"] = row["onset"]
-
         conclusion = row["conclusion"]
         basic_info = row["basic_info"]
         basic_info_json = json.loads(basic_info)
@@ -77,17 +73,6 @@ def process_data(df, unsorted_uc_list, unsorted_fhr_list, data_origin):
                 skipped += 1
                 print(f"Process DF: Skipped row {idx}")
                 continue
-
-        # elif data_origin == "rec":
-        #
-        #     last_menstrual = datetime.strptime(
-        #         row["last_menstrual_date"],
-        #         "%Y-%m-%d %H:%M:%S"
-        #     ) if not pd.isna(row["last_menstrual_date"]) else None
-        #
-        #     if last_menstrual:
-        #         gest_age_timedelta = row["start_ts"] - last_menstrual
-        #         gest_age = gest_age_timedelta.days
 
         else:
             skipped += 1

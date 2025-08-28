@@ -1,7 +1,12 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv("config/.env")
+ROOT = Path(__file__).resolve().parent
+
+ENV_PATH = ROOT / "config" / ".env"
+
+load_dotenv(ENV_PATH)
 
 DB_CONFIG = {
     'DB_HOST'   : os.getenv("DB_HOST"),

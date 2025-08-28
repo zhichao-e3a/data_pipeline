@@ -49,15 +49,10 @@ def process_data(df, unsorted_uc_list, unsorted_fhr_list, data_origin):
 
             digits = [int(c) for c in gest_string if c.isdigit()]
 
-            if digits:
-                if len(digits) == 3:
-                    gest_age = digits[0] * 10 * 7 + digits[1] * 7 + digits[2]
-                elif len(digits) == 2:
-                    gest_age = digits[0] * 10 * 7 + digits[1] * 7
-                elif len(digits) == 1:
-                    skipped += 1
-                    print(f"Process DF: Skipped row {idx}")
-                    continue
+            if len(digits) == 3:
+                gest_age = digits[0] * 10 * 7 + digits[1] * 7 + digits[2]
+            elif len(digits) == 2:
+                gest_age = digits[0] * 10 * 7 + digits[1] * 7
 
         elif basic_info_json["setPregTime"]:
 
@@ -69,18 +64,12 @@ def process_data(df, unsorted_uc_list, unsorted_fhr_list, data_origin):
                 gest_age = digits[0] * 10 * 7 + digits[1] * 7 + digits[2]
             elif len(digits) == 2:
                 gest_age = digits[0] * 10 * 7 + digits[1] * 7
-            elif len(digits) == 1:
-                skipped += 1
-                print(f"Process DF: Skipped row {idx}")
-                continue
-
-        else:
-            skipped += 1
-            print(f"Process DF: Skipped row {idx}")
-            continue
 
         if gest_age:
             data["gest_age"] = gest_age
             processed_list.append(data)
+        else:
+            skipped += 1
+            print(f"Process DF: Skipped row {idx}")
 
     return processed_list, skipped

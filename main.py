@@ -150,9 +150,15 @@ async def pipeline(job_id, data_origin):
     steps       = 6
     curr        = 0
     total_time  = 0
-    logs        = []
 
     try:
+        logging = {
+            "job_id"    : job_id,
+            "type"      : data_origin,
+            "date"      : datetime.now().isoformat(),
+            "logs"      : {}
+        }
+
         _check_cancel(job_id)
 
         _set_progress(job_id, progress=0, message=":material/database: Querying MySQL database")
@@ -178,8 +184,16 @@ async def pipeline(job_id, data_origin):
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Queried {len(df)} rows, {len(df.columns)} columns in {end - start:.2f} seconds"
-        logs.append(message)
+        message = f":material/done_outline: [{end - start:.2f} seconds] Queried {len(df)} rows {len(df.columns)} columns from MySQL database"
+        log = {
+            "Duration"          : round(end-start,2),
+            "Rows queried"      : len(df),
+            "Columns queried"   : len(df.columns),
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"]["Query MySQL"]  = log
+        logging["rows_queried"]         = len(df)
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         _check_cancel(job_id)
@@ -194,8 +208,14 @@ async def pipeline(job_id, data_origin):
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Downloaded {len(uc_results)} (x2) .gz links in {end-start:.2f} seconds"
-        logs.append(message)
+        message = f":material/done_outline: [{end-start:.2f} seconds] Downloaded {len(uc_results)*2} .gz links from Amazon Cloud"
+        log = {
+            "Duration"          : round(end-start,2),
+            "Links downloaded"  : len(uc_results)*2,
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"]["Download gz links"] = log
         _set_progress(job_id, progress=round((curr/steps)*100), message=message)
 
         _check_cancel(job_id)
@@ -212,8 +232,18 @@ async def pipeline(job_id, data_origin):
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: {len(processed_list_1)} rows, {len(processed_list_1[0])} columns remaining ({skipped_1} rows filtered in {end-start:.2f} seconds)"
-        logs.append(message)
+        message = f":material/done_outline: [{end-start:.2f} seconds] {len(processed_list_1)} rows {len(processed_list_1[0])} columns remaining ({skipped_1} rows filtered)"
+        log = {
+            "Duration"          : round(end-start,2),
+            "Initial rows"      : len(df),
+            "Initial columns"   : len(df.columns),
+            "Remaining rows"    : len(processed_list_1),
+            "Remaining columns" : len(processed_list_1[0]),
+            "Rows skipped"      : skipped_1,
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"]["Process Data"] = log
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         _check_cancel(job_id)
@@ -223,15 +253,25 @@ async def pipeline(job_id, data_origin):
 
         start = time.perf_counter()
 
-        rows_added_raw = len(processed_list_1) - await mongo.count_documents(coll_name)
+        initial_rows = await mongo.count_documents(coll_name)
+        rows_added_raw = len(processed_list_1) - initial_rows
         await mongo.upsert_records(processed_list_1, coll_name)
 
         end = time.perf_counter()
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_raw} rows to MongoDB ({coll_name}) in {end-start:.2f} seconds"
-        logs.append(message)
+        message = f":material/done_outline: [{end-start:.2f} seconds] Uploaded {rows_added_raw} rows to MongoDB ({coll_name})"
+        log = {
+            "Duration"          : round(end-start,2),
+            "Collection name"   : coll_name,
+            "Initial rows"      : initial_rows,
+            "Rows added"        : rows_added_raw,
+            "New rows"          : len(processed_list_1),
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"][f"Upload to MongoDB ({coll_name})"] = log
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         _check_cancel(job_id)
@@ -248,8 +288,18 @@ async def pipeline(job_id, data_origin):
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: {len(processed_list_2)} rows, {len(processed_list_2[0])} columns remaining ({skipped_2} rows filtered in {end-start:.2f} seconds)"
-        logs.append(message)
+        message = f":material/done_outline: [{end-start:.2f} seconds] {len(processed_list_2)} rows {len(processed_list_2[0])} columns remaining ({skipped_2} rows filtered)"
+        log = {
+            "Duration"          : round(end - start, 2),
+            "Initial rows"      : len(processed_list_1),
+            "Initial columns"   : len(processed_list_1[0]),
+            "Remaining rows"    : len(processed_list_2),
+            "Remaining columns" : len(processed_list_2[0]),
+            "Rows skipped"      : skipped_2,
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"]["Process Signals"] = log
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
         _check_cancel(job_id)
@@ -259,28 +309,30 @@ async def pipeline(job_id, data_origin):
 
         start = time.perf_counter()
 
-        rows_added_processed = len(processed_list_2) - await mongo.count_documents(coll_name)
+        initial_rows = await mongo.count_documents(coll_name)
+        rows_added_processed = len(processed_list_2) - initial_rows
         await mongo.upsert_records(processed_list_2, coll_name)
 
         end = time.perf_counter()
 
         curr += 1
         total_time += end - start
-        message = f":material/done_outline: Uploaded {rows_added_processed} rows to MongoDB ({coll_name}) in {end-start:.2f} seconds"
-        logs.append(message)
+        message = f":material/done_outline: [{end-start:.2f} seconds] Uploaded {rows_added_processed} rows to MongoDB ({coll_name})"
+        log = {
+            "Duration"          : round(end - start, 2),
+            "Collection name"   : coll_name,
+            "Initial rows"      : initial_rows,
+            "Rows added"        : rows_added_processed,
+            "New rows"          : len(processed_list_2),
+            "Status"            : "Completed",
+            "Message"           : message
+        }
+        logging["logs"][f"Upload to MongoDB ({coll_name})"] = log
+        logging["rows_added"] = rows_added_processed
         _set_progress(job_id, progress=round((curr / steps) * 100), message=message)
 
-        logging = {
-            "job_id"                : job_id,
-            "type"                  : data_origin,
-            "date"                  : datetime.now().isoformat(),
-            "status"                : "completed",
-            "rows_retrieved"        : len(df),
-            "rows_added_raw"        : rows_added_raw,
-            "rows_added_processed"  : rows_added_processed,
-            "total_time"            : total_time,
-            "logs"                  : logs
-        }
+        logging["status"] = "completed"
+        logging["total_time"] = total_time
 
         await mongo.upsert_records(logging, coll_name="logs")
         message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time:.2f} seconds"
@@ -289,17 +341,10 @@ async def pipeline(job_id, data_origin):
     except asyncio.CancelledError:
 
         message = f":material/cancel: Pipeline {job_id} cancelled by user"
-        logs.append(message)
         _set_progress(job_id, message=message, state="cancelled")
 
-        logging = {
-            "job_id"        : job_id,
-            "type"          : data_origin,
-            "date"          : datetime.now().isoformat(),
-            "status"        : "cancelled",
-            "total_time"    : total_time,
-            "logs"          : logs
-        }
+        logging["status"]       = "Cancelled"
+        logging["total_time"]   = total_time
 
         await mongo.upsert_records(logging, coll_name="logs")
         CANCELLED.discard(job_id)
@@ -309,15 +354,9 @@ async def pipeline(job_id, data_origin):
         message = f":material/error: Pipeline encountered an error when running\n{"".join(traceback.format_exception(type(e), e, e.__traceback__))}"
         _set_progress(job_id, message=message, state="failed")
 
-        logging = {
-            "job_id"        : job_id,
-            "type"          : data_origin,
-            "date"          : datetime.now().isoformat(),
-            "status"        : "failed",
-            "error"         : message,
-            "total_time"    : total_time,
-            "logs"          : logs
-        }
+        logging["logs"]["Error"]    = message
+        logging["status"]           = "Failed"
+        logging["total_time"]       = total_time
 
         await mongo.upsert_records(logging, coll_name="logs")
         message = f":material/done_outline: Logging completed, pipeline finished in a total of {total_time} seconds"

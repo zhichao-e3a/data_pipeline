@@ -26,7 +26,7 @@ def process_data(
         fhr = fhr_list[idx][1].split("\n")
         if len(uc) < 60 * 20 and len(fhr) < 60 * 20:
             skipped += 1
-            print(f"Process DF: Skipped row {idx}")
+            print(f"Bad UC and FHR: Skipped row {idx}")
             continue
 
         data = {

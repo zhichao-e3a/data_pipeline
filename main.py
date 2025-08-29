@@ -245,17 +245,30 @@ async def pipeline(job_id, data_origin):
 
         start = time.perf_counter()
 
-        processed_list_1, skipped_1 = await anyio.to_thread.run_sync(
-            lambda: process_data(
-                df,
-                uc_results,
-                fhr_results,
-                data_origin,
-                last_menstrual=last_menstrual_dates,
-                expected_delivery=expected_delivery,
-                actual_delivery=actual_delivery
+        if data_origin == "rec":
+
+            processed_list_1, skipped_1 = await anyio.to_thread.run_sync(
+                lambda: process_data(
+                    df,
+                    uc_results,
+                    fhr_results,
+                    data_origin,
+                    last_menstrual=last_menstrual_dates,
+                    expected_delivery=expected_delivery,
+                    actual_delivery=actual_delivery
+                )
             )
-        )
+
+        elif data_origin == "hist":
+
+            processed_list_1, skipped_1 = await anyio.to_thread.run_sync(
+                lambda: process_data(
+                    df,
+                    uc_results,
+                    fhr_results,
+                    data_origin
+                )
+            )
 
         end = time.perf_counter()
 
@@ -284,7 +297,7 @@ async def pipeline(job_id, data_origin):
 
         initial_rows = await mongo.count_documents(coll_name)
         rows_added_raw = len(processed_list_1) - initial_rows
-        await mongo.upsert_records(processed_list_1, coll_name)
+        await mongo.upsert_records_hashed(processed_list_1, coll_name)
 
         end = time.perf_counter()
 
@@ -340,7 +353,7 @@ async def pipeline(job_id, data_origin):
 
         initial_rows = await mongo.count_documents(coll_name)
         rows_added_processed = len(processed_list_2) - initial_rows
-        await mongo.upsert_records(processed_list_2, coll_name)
+        await mongo.upsert_records_hashed(processed_list_2, coll_name)
 
         end = time.perf_counter()
 

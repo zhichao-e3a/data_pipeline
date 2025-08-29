@@ -1,9 +1,10 @@
 from config.configs import MONGO_CONFIG
+# from config.configs import DEFAULT_MONGO_CONFIG as MONGO_CONFIG
 
-from datetime import datetime, timezone
-from contextlib import asynccontextmanager
 import json
 import hashlib
+from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -53,21 +54,6 @@ class MongoDBConnector:
             await asyncio.sleep(0.5)
             await coll.bulk_write(ops, ordered=False)
 
-    def _fingerprint(self, obj):
-
-        clean = {
-            k:v for k,v in obj.items() if k in {
-                "uc", "fhr", "gest_age"
-            }
-        }
-
-        blob = json.dumps(
-            clean, sort_keys=True, indent=4, separators=(',', ': '), default=str
-        ).encode()
-
-        return hashlib.sha1(blob).hexdigest()
-
-
     async def upsert_records(self, records, coll_name, batch_size=500):
 
         async with self.resource(coll_name) as coll:
@@ -78,54 +64,32 @@ class MongoDBConnector:
                 to_insert = dict(records)
                 to_insert.pop("job_id")
 
-                to_insert = UpdateOne({"_id": _id}, {"$set": to_insert}, upsert=True)
+                to_insert = UpdateOne(
+                    {"_id": _id},
+                    {"$set": to_insert},
+                    upsert=True
+                )
+
                 await self.flush(coll, [to_insert])
 
-            else:
+            elif coll_name == "consolidated_patients":
 
                 ops = []
 
                 for item in records:
 
+                    _id = item.get("contact")
                     to_insert = dict(item)
+                    to_insert.pop("contact")
 
-                    if "row_id" in item:
-                        _id = item.get("row_id")
-                        to_insert.pop("row_id")
-                    else:
-                        print("!!!")
-                        _id = item.get("id")
-                        to_insert.pop("id")
-
-                    h = self._fingerprint(to_insert)
+                    to_insert.setdefault(
+                        "fetched_at",
+                        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    )
 
                     op = UpdateOne(
-                        {
-                            "_id": _id,
-                            "$or" : [
-                                {
-                                    "doc_hash" : {
-                                        "$ne" : h
-                                    }
-                                },
-                                {
-                                    "doc_hash" : {
-                                        "$exists" : False
-                                    }
-                                }
-                            ]
-
-                        },
-                        {
-                            "$set" : {
-                                **to_insert,
-                                "doc_hash"      : h,
-                                "fetched_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                            },
-                            "$setOnInsert": {
-                                "created_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                            }
-                        },
+                        {"_id": _id},
+                        {"$set": to_insert},
                         upsert=True
                     )
 
@@ -146,12 +110,14 @@ class MongoDBConnector:
 
             return count
 
-    async def get_all_documents(self, coll_name, projection=None, batch_size=1000):
+    async def get_all_documents(self, coll_name, query={}, projection=None, batch_size=1000):
 
         async with self.resource(coll_name) as coll:
 
             try:
-                cursor = coll.find({})
+
+                cursor = coll.find(query)
+
                 if batch_size:
                     cursor = cursor.batch_size(batch_size)
                 return [doc async for doc in cursor]
@@ -162,3 +128,72 @@ class MongoDBConnector:
                 if batch_size:
                     cursor = cursor.batch_size(batch_size)
                 return [doc async for doc in cursor]
+
+    def _fingerprint(self, obj):
+
+        clean = {
+            k:v for k,v in obj.items() if k in {
+                "uc", "fhr", "gest_age", "expected_delivery", "actual_delivery"
+            }
+        }
+
+        blob = json.dumps(
+            clean, sort_keys=True, indent=4, separators=(',', ': '), default=str
+        ).encode()
+
+        return hashlib.sha1(blob).hexdigest()
+
+
+    async def upsert_records_hashed(self, records, coll_name, batch_size=500):
+
+        async with self.resource(coll_name) as coll:
+
+            ops = []
+
+            for item in records:
+
+                to_insert = dict(item)
+
+                _id = item.get("row_id")
+                to_insert.pop("row_id")
+
+                h = self._fingerprint(to_insert)
+
+                op = UpdateOne(
+                    {
+                        "_id": _id,
+                        "$or" : [
+                            {
+                                "doc_hash" : {
+                                    "$ne" : h
+                                }
+                            },
+                            {
+                                "doc_hash" : {
+                                    "$exists" : False
+                                }
+                            }
+                        ]
+
+                    },
+                    {
+                        "$set" : {
+                            **to_insert,
+                            "doc_hash"      : h,
+                            "fetched_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        },
+                        "$setOnInsert": {
+                            "created_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                    },
+                    upsert=True
+                )
+
+                ops.append(op)
+
+                if len(ops) >= batch_size:
+                    await self.flush(coll, ops)
+                    ops = []
+
+            if ops:
+                await self.flush(coll, ops)

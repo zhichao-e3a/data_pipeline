@@ -166,8 +166,16 @@ async def pipeline(job_id, data_origin):
         start = time.perf_counter()
 
         if data_origin == "rec":
-            merged_df = await mongo.get_all_documents("consolidated_patients")
-            query_string = ",".join([f"'{i["_id"]}'" for i in merged_df])
+
+            consolidated_patients   = await mongo.get_all_documents("consolidated_patients")
+            recruited_patients      = [i for i in consolidated_patients if i["data_origin"] == "recruited"]
+
+            query_string = ",".join(
+                [
+                    f"'{i["_id"]}'" for i in recruited_patients
+                ]
+            )
+
             df = await anyio.to_thread.run_sync(
                 lambda: db.query_to_dataframe(
                     sql=RECRUITED.format(
@@ -177,6 +185,19 @@ async def pipeline(job_id, data_origin):
                     )
                 )
             )
+
+            last_menstrual_dates = {
+                i["_id"]: i["last_menstrual"] for i in recruited_patients
+            }
+
+            expected_delivery = {
+                i["_id"]: i["expected_delivery"] for i in recruited_patients
+            }
+
+            actual_delivery = {
+                i["_id"]: i["actual_delivery"] for i in recruited_patients
+            }
+
         else:
             df = await anyio.to_thread.run_sync(lambda: db.query_to_dataframe(sql=HISTORICAL))
 
@@ -225,7 +246,15 @@ async def pipeline(job_id, data_origin):
         start = time.perf_counter()
 
         processed_list_1, skipped_1 = await anyio.to_thread.run_sync(
-            lambda: process_data(df, uc_results, fhr_results, data_origin)
+            lambda: process_data(
+                df,
+                uc_results,
+                fhr_results,
+                data_origin,
+                last_menstrual=last_menstrual_dates,
+                expected_delivery=expected_delivery,
+                actual_delivery=actual_delivery
+            )
         )
 
         end = time.perf_counter()

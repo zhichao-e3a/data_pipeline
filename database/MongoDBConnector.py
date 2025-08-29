@@ -1,4 +1,4 @@
-from config.db_config import MONGO_CONFIG
+from config.configs import MONGO_CONFIG
 
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager

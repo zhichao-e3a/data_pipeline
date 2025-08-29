@@ -1,4 +1,4 @@
-from config.db_config import DB_CONFIG
+from config.configs import DB_CONFIG
 
 import pandas as pd
 from contextlib import contextmanager

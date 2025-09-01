@@ -6,7 +6,7 @@ import ssl
 import certifi
 import random
 
-from tqdm.auto import tqdm
+# from tqdm.auto import tqdm
 
 """
 1XX - Informational (request received and still processing)
@@ -109,7 +109,7 @@ async def process_urls(urls_indexed, link_type):
 
     async with client_session as session:
 
-        for _url_indexed in tqdm(urls_indexed):
+        for _url_indexed in urls_indexed:
 
             # Coroutines are scheduled and start to execute here
             task = asyncio.create_task(
@@ -125,7 +125,7 @@ async def process_urls(urls_indexed, link_type):
             tasks.append(task)
 
         # Completed tasks are processed here in terms of completion order
-        for fut in tqdm(asyncio.as_completed(tasks)):
+        for fut in asyncio.as_completed(tasks):
             res = await fut
             results.append(res)
 

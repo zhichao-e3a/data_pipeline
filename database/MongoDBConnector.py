@@ -17,7 +17,8 @@ class MongoDBConnector:
     def __init__(self):
         pass
 
-    def build_client(self):
+    @staticmethod
+    def build_client():
 
         return AsyncIOMotorClient(
             MONGO_CONFIG["DB_HOST"],
@@ -39,7 +40,8 @@ class MongoDBConnector:
         finally:
             client.close()
 
-    async def flush(self, coll, ops):
+    @staticmethod
+    async def flush(coll, ops):
 
         try:
             await coll.bulk_write(ops, ordered=False)
@@ -129,7 +131,8 @@ class MongoDBConnector:
                     cursor = cursor.batch_size(batch_size)
                 return [doc async for doc in cursor]
 
-    def _fingerprint(self, obj):
+    @staticmethod
+    def _fingerprint(obj):
 
         clean = {
             k:v for k,v in obj.items() if k in {
@@ -157,7 +160,7 @@ class MongoDBConnector:
                 _id = item.get("row_id")
                 to_insert.pop("row_id")
 
-                h = self._fingerprint(to_insert)
+                h = await asyncio.to_thread(self._fingerprint, to_insert)
 
                 op = UpdateOne(
                     {

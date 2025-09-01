@@ -26,7 +26,7 @@ def process_data(
         fhr = fhr_list[idx][1].split("\n")
         if len(uc) < 60 * 20 and len(fhr) < 60 * 20:
             skipped += 1
-            print(f"Bad UC and FHR: Skipped row {idx}")
+            # print(f"Bad UC and FHR: Skipped row {idx}")
             continue
 
         data = {
@@ -44,7 +44,7 @@ def process_data(
 
             if not actual_delivery:
                 skipped += 1
-                print(f"No ADD: Skipped row {idx}")
+                # print(f"No ADD: Skipped row {idx}")
                 continue
 
             data["expected_delivery"]   = expected_delivery
@@ -101,6 +101,6 @@ def process_data(
             processed_list.append(data)
         else:
             skipped += 1
-            print(f"No gest_age: Skipped row {idx}")
+            # print(f"No gest_age: Skipped row {idx}")
 
     return processed_list, skipped

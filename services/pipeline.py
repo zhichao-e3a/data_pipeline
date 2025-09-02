@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from core import states
 from database.SQLDBConnector import SQLDBConnector
 from database.MongoDBConnector import MongoDBConnector
@@ -8,19 +10,13 @@ from utils.data_download import async_process_urls
 from utils.data_process import process_data
 from utils.signal_processing import process_signals
 from services.notifier import set_progress
+from services.shared import _check_cancel, log_watermark
 
 import time, anyio, asyncio, traceback
 from datetime import datetime
 
 db      = SQLDBConnector()
 mongo   = MongoDBConnector()
-
-def _check_cancel(
-        job_id: str
-) -> None:
-
-    if job_id in states.CANCELLED:
-        raise asyncio.CancelledError(f"Pipeline {job_id} was cancelled")
 
 async def run_pipeline(
         job_id: str,
@@ -32,6 +28,10 @@ async def run_pipeline(
     total_time  = 0.0
 
     try:
+        watermarks = await mongo.get_all_documents("watermarks")
+        curr_watermark = [i for i in watermarks if i["_id"] == data_origin]
+        last_utime = curr_watermark[0]["last_utime"]
+
         _check_cancel(job_id)
         set_progress(
             job_id,
@@ -57,10 +57,20 @@ async def run_pipeline(
                     sql=RECRUITED.format(
                         start="'2025-03-01 00:00:00'",
                         end=f"'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'",
-                        numbers=query_string
+                        numbers=query_string,
+                        last_utime=last_utime
                     )
                 )
             )
+
+            if len(df) == 0:
+                end = time.perf_counter()
+                set_progress(
+                    job_id,
+                    message=f":material/done_outline: [{end-start:.2f} s] No new rows",
+                    state="completed"
+                )
+                return
 
             last_menstrual      = {
                 i["_id"]: i["last_menstrual"] for i in recruited_patients
@@ -76,8 +86,33 @@ async def run_pipeline(
 
         else:
             df = await anyio.to_thread.run_sync(
-                lambda: db.query_to_dataframe(sql=HISTORICAL)
+                lambda: db.query_to_dataframe(
+                    sql=HISTORICAL.format(
+                        last_utime=last_utime
+                    )
+                )
             )
+
+            if len(df) == 0:
+                end = time.perf_counter()
+                set_progress(
+                    job_id,
+                    message=f":material/done_outline: [{end-start:.2f} s] No new rows",
+                    state="completed"
+                )
+                return
+
+        # Log watermark for SQL
+        latest_utime = pd.to_datetime(df["utime"])\
+            .max().strftime("%Y-%m-%d %H:%M:%S")
+
+        watermark_log = log_watermark(
+            pipeline_name=data_origin,
+            utime=latest_utime,
+            job_id=job_id,
+        )
+
+        await mongo.upsert_records_hashed([watermark_log], "watermarks")
 
         end = time.perf_counter()
 

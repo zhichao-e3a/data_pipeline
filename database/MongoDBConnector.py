@@ -132,13 +132,23 @@ class MongoDBConnector:
                 return [doc async for doc in cursor]
 
     @staticmethod
-    def _fingerprint(obj):
+    def _fingerprint(obj, hash_type):
 
-        clean = {
-            k:v for k,v in obj.items() if k in {
-                "uc", "fhr", "gest_age", "expected_delivery", "actual_delivery"
+        if hash_type == "measurement":
+
+            clean = {
+                k:v for k,v in obj.items() if k in {
+                    "uc", "fhr", "gest_age", "expected_delivery", "actual_delivery"
+                }
             }
-        }
+
+        elif hash_type == "watermark":
+
+            clean = {
+                k: v for k, v in obj.items() if k in {
+                    "utime", "last_job_id", "last_row_id", "time"
+                }
+            }
 
         blob = json.dumps(
             clean, sort_keys=True, indent=4, separators=(',', ': '), default=str
@@ -155,12 +165,16 @@ class MongoDBConnector:
 
             for item in records:
 
-                to_insert = dict(item)
-
-                _id = item.get("row_id")
-                to_insert.pop("row_id")
-
-                h = await asyncio.to_thread(self._fingerprint, to_insert)
+                if coll_name == "watermarks":
+                    to_insert = dict(item)
+                    _id = item["pipeline_name"]
+                    to_insert.pop("pipeline_name")
+                    h = await asyncio.to_thread(self._fingerprint, to_insert, "watermark")
+                else:
+                    to_insert = dict(item)
+                    _id = item.get("row_id")
+                    to_insert.pop("row_id")
+                    h = await asyncio.to_thread(self._fingerprint, to_insert, "measurement")
 
                 op = UpdateOne(
                     {

@@ -2,7 +2,8 @@ HISTORICAL = """
 SELECT
 uu.mobile,
 r.id,
-start_ts,
+r.start_ts,
+r.start_test_ts,
 r.contraction_url,
 r.hb_baby_url,
 r.basic_info,
@@ -30,7 +31,8 @@ RECRUITED = """
 SELECT
 uu.mobile,
 r.id,
-start_ts,
+r.start_ts,
+r.start_test_ts,
 r.contraction_url,
 r.hb_baby_url,
 r.basic_info,

@@ -20,6 +20,8 @@ def process_data(
         row_id              = row['id']
         mobile              = row['mobile']
         measurement_date    = datetime.fromtimestamp(int(row['start_ts']))
+        start_test_ts       = datetime.fromtimestamp(int(row['start_test_ts']))\
+        if row['start_test_ts'] else None
         gest_age            = None
 
         uc = uc_list[idx][1].split("\n")
@@ -33,13 +35,18 @@ def process_data(
             "row_id"            : row_id,
             "mobile"            : mobile,
             "measurement_date"  : measurement_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "start_test_ts"     : start_test_ts.strftime("%Y-%m-%d %H:%M:%S")\
+            if start_test_ts else None,
             "uc"                : uc,
             "fhr"               : fhr,
         }
 
         if data_origin == "rec":
 
-            expected_delivery   = kwargs["expected_delivery"][mobile]
+            expected_delivery   = datetime.strptime(
+                kwargs["expected_delivery"][mobile], "%Y-%m-%d"
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
             actual_delivery     = kwargs["actual_delivery"][mobile]
 
             if not actual_delivery:
@@ -91,7 +98,7 @@ def process_data(
 
             if last_menstrual_str and not gest_age:
 
-                last_menstrual_date = datetime.strptime(last_menstrual_str, "%Y-%m-%d %H:%M:%S")
+                last_menstrual_date = datetime.strptime(last_menstrual_str, "%Y-%m-%d")
 
                 diff = measurement_date - last_menstrual_date
                 gest_age = diff.days

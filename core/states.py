@@ -1,16 +1,14 @@
-# File for shared runtime states
-
 from __future__ import annotations
+from typing import Optional
 from collections import defaultdict
-
 import asyncio
+from logging.handlers import QueueListener
 
-LOOP: asyncio.AbstractEventLoop | None = None
-
-# Stores Job IDs
-PROGRESS    : dict[str, dict[str, str|int]] = {}
+LOOP        : Optional[asyncio.AbstractEventLoop] = None
+LOG_LISTEN  : Optional[QueueListener] = None
+PROGRESS    : dict[str, dict[str, str | int]] = {}
 CANCELLED   : set[str] = set()
-subscribers = defaultdict(set)
 
-# Can use for controlling processing stage
+SUBSCRIBERS = defaultdict(set)
+
 PROCESS_SEM = asyncio.Semaphore(1)

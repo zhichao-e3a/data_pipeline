@@ -1,15 +1,28 @@
 from api.v1.router import api_router
 from core import states
 from core.middleware import install_middleware
+from core.logging_config import setup_logging
 
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(
+        app: FastAPI
+):
 
     states.LOOP = __import__("asyncio").get_event_loop()
+
+    states.LOG_LISTEN = setup_logging(
+        remote = True
+    )
+
     yield
+
+    listener = getattr(states, "log_listener", None)
+
+    if listener:
+        listener.stop()
 
 app = FastAPI(
     lifespan=lifespan,
@@ -17,9 +30,6 @@ app = FastAPI(
 )
 
 install_middleware(app)
-
-app.include_router(
-    api_router
-)
+app.include_router(api_router)
 
 # uvicorn main:app --host 127.0.0.1 --port 8502

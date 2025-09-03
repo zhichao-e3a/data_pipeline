@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from libcst.testing.utils import data_provider
-
 from core import states
 
 from database.queries import HISTORICAL, RECRUITED
@@ -226,14 +224,6 @@ async def run_pipeline(
                 latest_utime = pd.to_datetime(df["utime"])\
                     .max().strftime("%Y-%m-%d %H:%M:%S")
 
-                watermark_log = log_watermark(
-                    pipeline_name=data_origin,
-                    utime=latest_utime,
-                    job_id=job_id,
-                )
-
-                await mongo.upsert_records_hashed([watermark_log], "watermarks")
-
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
@@ -345,9 +335,6 @@ async def run_pipeline(
                             )
                         )
 
-                    placeholder["rows"] = len(processed_list_1)
-                    placeholder["cols"] = len(processed_list_1[0])
-
                 if len(processed_list_1) == 0:
                     end = time.perf_counter()
                     set_progress(
@@ -362,7 +349,14 @@ async def run_pipeline(
                         message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s",
                         state = "completed"
                     )
+
+                    placeholder["rows"] = 0
+                    placeholder["cols"] = 0
+
                     return
+
+                placeholder["rows"] = len(processed_list_1)
+                placeholder["cols"] = len(processed_list_1[0])
 
                 end = time.perf_counter()
                 curr += 1
@@ -455,9 +449,6 @@ async def run_pipeline(
                     lambda: process_signals(processed_list_1)
                 )
 
-                placeholder["rows"] = len(processed_list_1)
-                placeholder["cols"] = len(processed_list_1[0])
-
                 if len(processed_list_2) == 0:
                     end = time.perf_counter()
                     set_progress(
@@ -472,7 +463,12 @@ async def run_pipeline(
                         message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s",
                         state = "completed"
                     )
+                    placeholder["rows"] = 0
+                    placeholder["cols"] = 0
                     return
+
+                placeholder["rows"] = len(processed_list_2)
+                placeholder["cols"] = len(processed_list_2[0])
 
                 end = time.perf_counter()
                 curr += 1
@@ -529,6 +525,14 @@ async def run_pipeline(
                     progress = round((curr/steps)*100),
                     message = message
                 )
+
+            watermark_log = log_watermark(
+                pipeline_name=data_origin,
+                utime=latest_utime,
+                job_id=job_id,
+            )
+
+            await mongo.upsert_records_hashed([watermark_log], "watermarks")
 
             set_progress(
                 job_id,

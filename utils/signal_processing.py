@@ -21,22 +21,42 @@ def process_signals(data_list):
         uc_raw  = [float(i) if i not in ("", None) else np.nan for i in uc_truncated]
         fhr_raw = [float(i) if i not in ("", None) else np.nan for i in fhr_truncated]
 
-        uc_cleaned  = clean_uc_signal(uc_raw)
-        fhr_cleaned = clean_fhr_signal(fhr_raw)
+        uc_clamped  = np.array([clean_uc_fhr_pair(u, f)[0] for u, f in zip(uc_raw, fhr_raw)])
+        fhr_clamped = np.array([clean_uc_fhr_pair(u, f)[1] for u, f in zip(uc_raw, fhr_raw)])
 
-        uc_final    = [float(u) for u in uc_cleaned if not np.isnan(u)]
-        fhr_final   = [float(f) for f in fhr_cleaned if not np.isnan(f)]
+        fhr_interp  = linear_interpolate_nan(fhr_clamped)
+        fhr_cleaned = clean_fhr_signal(fhr_interp)
 
-        if not uc_final or not fhr_final:
+        uc_cleaned = clean_uc_signal(uc_clamped.tolist())
+
+        cleaned_pairs = [
+            [float(u), float(f)]
+            for u, f in zip(uc_cleaned, fhr_cleaned)
+            if not (np.isnan(f) or np.isnan(u))
+        ]
+
+        if not cleaned_pairs:
             skipped += 1
-            continue
 
-        row['uc']   = uc_final
-        row['fhr']  = fhr_final
+        row['uc']   = [i[0] for i in cleaned_pairs]
+        row['fhr']  = [i[1] for i in cleaned_pairs]
 
         processed_list.append(row)
 
     return processed_list, skipped
+
+def clean_uc_fhr_pair(uc_value, fhr_value):
+
+    uc_value = float(uc_value) if uc_value not in ["", None] else np.nan
+    fhr_value = float(fhr_value) if fhr_value not in ["", None] else np.nan
+
+    if uc_value < 0 or uc_value > 100:
+        uc_value = np.nan
+
+    if fhr_value == 0 or fhr_value < 50 or fhr_value > 180:
+        fhr_value = np.nan
+
+    return uc_value, fhr_value
 
 def linear_interpolate_nan(arr, max_gap_length=15):
 
@@ -78,8 +98,8 @@ def median_filter_3(arr: np.ndarray) -> np.ndarray:
 
     for i in range(1, n - 1):
 
-        window = [arr[i - 1], arr[i], arr[i + 1]]
-        vals = [x for x in window if not np.isnan(x)]
+        window      = [arr[i - 1], arr[i], arr[i + 1]]
+        vals        = [x for x in window if not np.isnan(x)]
         arr_copy[i] = np.median(vals) if vals else np.nan
 
     return arr_copy
@@ -104,7 +124,7 @@ def clean_uc_signal(uc_list: list[float]) -> np.ndarray:
     arr = np.array(uc_list, dtype=float)
 
     # Clamp invalid values to NaN
-    arr[(arr < 0) | (arr>100)]    = np.nan
+    arr[(arr < 0) | (arr>100)] = np.nan
 
     # Remove single-sample spikes via 3-point median filter
     arr = median_filter_3(arr)

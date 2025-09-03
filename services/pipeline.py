@@ -526,14 +526,6 @@ async def run_pipeline(
                     message = message
                 )
 
-            watermark_log = log_watermark(
-                pipeline_name=data_origin,
-                utime=latest_utime,
-                job_id=job_id,
-            )
-
-            await mongo.upsert_records_hashed([watermark_log], "watermarks")
-
             set_progress(
                 job_id,
                 progress = None,
@@ -566,3 +558,13 @@ async def run_pipeline(
                 message=f":material/error: Pipeline encountered an error\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}",
                 state="failed"
             )
+
+        finally:
+
+            watermark_log = log_watermark(
+                pipeline_name=data_origin,
+                utime=latest_utime,
+                job_id=job_id,
+            )
+
+            await mongo.upsert_records_hashed([watermark_log], "watermarks")

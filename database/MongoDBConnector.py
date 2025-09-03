@@ -155,7 +155,7 @@ class MongoDBConnector:
 
             clean = {
                 k: v for k, v in obj.items() if k in {
-                    "utime", "last_job_id", "last_row_id", "time"
+                    "last_utime", "last_job_id", "time"
                 }
             }
 

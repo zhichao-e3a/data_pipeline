@@ -3,7 +3,7 @@ from core import states
 import asyncio
 from datetime import datetime
 
-def _check_cancel(
+def check_cancel(
         job_id: str
 ) -> None:
 

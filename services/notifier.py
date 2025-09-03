@@ -11,7 +11,7 @@ async def _publish(
     dead = []
 
     # Iterate through current sockets and send update to them
-    for ws in list(states.subscribers.get(job_id, [])):
+    for ws in list(states.SUBSCRIBERS.get(job_id, [])):
 
         try:
             await ws.send_json(payload)
@@ -22,7 +22,7 @@ async def _publish(
 
     # Discard dead sockets
     for ws in dead:
-        states.subscribers[job_id].discard(ws)
+        states.SUBSCRIBERS[job_id].discard(ws)
 
 def emit(
         job_id: str,
@@ -82,7 +82,7 @@ async def ws_status(
     await websocket.accept()
 
     # Stores socket in a per-job subscriber set
-    states.subscribers[job_id].add(websocket)
+    states.SUBSCRIBERS[job_id].add(websocket)
 
     # Grab current status from in-memory
     snapshot = states.PROGRESS.get(
@@ -108,4 +108,4 @@ async def ws_status(
         traceback.print_exc()
 
     finally:
-        states.subscribers[job_id].discard(websocket)
+        states.SUBSCRIBERS[job_id].discard(websocket)

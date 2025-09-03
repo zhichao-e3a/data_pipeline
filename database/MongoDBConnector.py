@@ -1,5 +1,4 @@
-from config.configs import MONGO_CONFIG
-# from config.configs import DEFAULT_MONGO_CONFIG as MONGO_CONFIG
+from config.configs import MONGO_CONFIG, DEFAULT_MONGO_CONFIG
 
 import json
 import hashlib
@@ -14,14 +13,19 @@ from pymongo.errors import AutoReconnect, BulkWriteError
 
 class MongoDBConnector:
 
-    def __init__(self):
-        pass
+    def __init__(self, remote):
 
-    @staticmethod
-    def build_client():
+        self.remote = remote
+
+    def build_client(self):
+
+        if self.remote:
+            config = DEFAULT_MONGO_CONFIG
+        else:
+            config = MONGO_CONFIG
 
         return AsyncIOMotorClient(
-            MONGO_CONFIG["DB_HOST"],
+            config["DB_HOST"],
             minPoolSize = 5,
             maxPoolSize = 50
         )
@@ -31,9 +35,14 @@ class MongoDBConnector:
 
         client = self.build_client()
 
+        if self.remote:
+            config = DEFAULT_MONGO_CONFIG
+        else:
+            config = MONGO_CONFIG
+
         try:
             await client.admin.command('ping')
-            db      = client[MONGO_CONFIG["DB_NAME"]]
+            db      = client[config["DB_NAME"]]
             coll    = db[coll_name]
             yield coll
 

@@ -41,9 +41,9 @@ def consolidate(measurements, patients):
             "fhr"               : row["fhr"],
             "gest_age"          : row["gest_age"],
 
-            # Use expected and actual delivery from the measurements (not from Excel)
-            "expected_delivery" : row["expected_delivery"],
-            "actual_delivery"   : row["actual_delivery"],
+            # Use expected and actual delivery from the Excel (patients_unified)
+            "expected_delivery" : row["expected_delivery"] if row["recruitment_type"] == "historical" else row["estimated_delivery_date"],
+            "actual_delivery"   : row["actual_delivery"] if row["recruitment_type"] == "historical" else row["delivery_datetime"],
 
             "onset"             : row["onset_datetime"]
         }

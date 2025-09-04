@@ -10,7 +10,7 @@ def process_data(
 ):
 
     processed_list = []
-    skipped = {"bad_measurements" : 0, "no_gest_age" : 0, "no_actual_delivery" : 0}
+    skipped = {"bad_measurements" : 0, "no_gest_age" : 0}
 
     uc_list = sorted(unsorted_uc_list, key=lambda x: x[0])
     fhr_list = sorted(unsorted_fhr_list, key=lambda x: x[0])
@@ -47,12 +47,7 @@ def process_data(
                 kwargs["expected_delivery"][mobile], "%Y-%m-%d"
             ).strftime("%Y-%m-%d %H:%M:%S")
 
-            actual_delivery     = kwargs["actual_delivery"][mobile]
-
-            if not actual_delivery:
-                skipped["no_actual_delivery"] += 1
-                # print(f"No ADD: Skipped row {idx}")
-                continue
+            actual_delivery = kwargs["actual_delivery"][mobile]
 
             data["expected_delivery"]   = expected_delivery
             data["actual_delivery"]     = actual_delivery

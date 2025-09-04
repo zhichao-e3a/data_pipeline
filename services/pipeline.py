@@ -336,7 +336,6 @@ async def run_pipeline(
 
                 skipped_bad_measurements    = skipped_1["bad_measurements"]
                 skipped_no_gest_age         = skipped_1["no_gest_age"]
-                skipped_no_add              = skipped_1["no_actual_delivery"]
 
                 message = f":material/priority_high: {skipped_bad_measurements} ROWS FILTERED DUE TO BAD UC, FHR MEASUREMENTS"
                 set_progress(
@@ -352,14 +351,6 @@ async def run_pipeline(
                     progress=None,
                     message=message,
                     state="None"
-                )
-
-                message = f":material/priority_high: {skipped_no_add} ROWS FILTERED DUE TO NO ACTUAL DELIVERY DATE"
-                set_progress(
-                    job_id,
-                    progress = None,
-                    message = message,
-                    state = "None"
                 )
 
                 if len(processed_list_1) == 0:
@@ -393,7 +384,7 @@ async def run_pipeline(
                 curr += 1
                 total_time += end-start
 
-                message = f":material/done_outline: [{end-start:.2f} s] {len(processed_list_1)} ROWS {len(processed_list_1[0])} COLS (FILTERED {skipped_1} ROWS)"
+                message = f":material/done_outline: [{end-start:.2f} s] {len(processed_list_1)} ROWS {len(processed_list_1[0])} COLS (FILTERED {skipped_bad_measurements+skipped_no_gest_age} ROWS)"
                 set_progress(
                     job_id,
                     progress = round((curr/steps)*100),

@@ -37,6 +37,7 @@ def process_signals(data_list):
 
         if not cleaned_pairs:
             skipped += 1
+            continue
 
         row['uc']   = [i[0] for i in cleaned_pairs]
         row['fhr']  = [i[1] for i in cleaned_pairs]

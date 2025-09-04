@@ -10,7 +10,7 @@ def process_data(
 ):
 
     processed_list = []
-    skipped = 0
+    skipped = {"bad_measurements" : 0, "no_gest_age" : 0, "no_actual_delivery" : 0}
 
     uc_list = sorted(unsorted_uc_list, key=lambda x: x[0])
     fhr_list = sorted(unsorted_fhr_list, key=lambda x: x[0])
@@ -27,7 +27,7 @@ def process_data(
         uc = uc_list[idx][1].split("\n")
         fhr = fhr_list[idx][1].split("\n")
         if len(uc) < 60 * 20 and len(fhr) < 60 * 20:
-            skipped += 1
+            skipped["bad_measurements"] += 1
             # print(f"Bad UC and FHR: Skipped row {idx}")
             continue
 
@@ -50,7 +50,7 @@ def process_data(
             actual_delivery     = kwargs["actual_delivery"][mobile]
 
             if not actual_delivery:
-                skipped += 1
+                skipped["no_actual_delivery"] += 1
                 # print(f"No ADD: Skipped row {idx}")
                 continue
 
@@ -107,7 +107,7 @@ def process_data(
             data["gest_age"] = gest_age
             processed_list.append(data)
         else:
-            skipped += 1
+            skipped["no_gest_age"] += 1
             # print(f"No gest_age: Skipped row {idx}")
 
     return processed_list, skipped

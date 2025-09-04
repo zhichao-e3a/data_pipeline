@@ -117,10 +117,12 @@ async def run_pipeline(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = ":material/database: QUERYING MYSQL DATABASE"
                 set_progress(
                     job_id,
                     progress = None,
-                    message = ":material/database: QUERYING MYSQL DATABASE",
+                    message = message,
                     state = None
                 )
 
@@ -161,26 +163,45 @@ async def run_pipeline(
                         )
                     )
 
-                    placeholder["rows"] = len(df)
-                    placeholder["cols"] = len(df.columns)
+                elif data_origin == "hist":
 
-                    # If no rows queried
-                    if len(df) == 0:
-                        end = time.perf_counter()
-                        set_progress(
-                            job_id,
-                            progress = None,
-                            message =f":material/done_outline: NO NEW ROWS",
-                            state = "None"
+                    df = await anyio.to_thread.run_sync(
+                        lambda: db.query_to_dataframe(
+                            sql=HISTORICAL.format(
+                                last_utime=last_utime
+                            )
                         )
-                        set_progress(
-                            job_id,
-                            progress = None,
-                            message = f":material/person_celebrate: PIPELINE FINISHED IN {end-start:.2f} s",
-                            state = "completed"
-                        )
-                        return
+                    )
 
+                if len(df) == 0:
+
+                    end = time.perf_counter()
+
+                    message = f":material/done_outline: NO NEW ROWS"
+                    set_progress(
+                        job_id,
+                        progress=None,
+                        message=message,
+                        state="None"
+                    )
+
+                    message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s"
+                    set_progress(
+                        job_id,
+                        progress=None,
+                        message=message,
+                        state="completed"
+                    )
+
+                    placeholder["rows"] = 0
+                    placeholder["cols"] = 0
+
+                    return
+
+                placeholder["rows"] = len(df)
+                placeholder["cols"] = len(df.columns)
+
+                if data_origin == "rec":
                     last_menstrual      = {
                         i["patient_id"]: i["last_menstrual_period"] for i in recruited_patients
                     }
@@ -193,40 +214,13 @@ async def run_pipeline(
                         i["patient_id"]: i["delivery_datetime"] for i in recruited_patients
                     }
 
-                else:
-                    df = await anyio.to_thread.run_sync(
-                        lambda: db.query_to_dataframe(
-                            sql=HISTORICAL.format(
-                                last_utime=last_utime
-                            )
-                        )
-                    )
-
-                    placeholder["rows"] = len(df)
-                    placeholder["cols"] = len(df.columns)
-
-                    if len(df) == 0:
-                        end = time.perf_counter()
-                        set_progress(
-                            job_id,
-                            progress = None,
-                            message = f":material/done_outline: NO NEW ROWS",
-                            state = None
-                        )
-                        set_progress(
-                            job_id,
-                            progress = None,
-                            message = f":material/done_outline: PIPELINE FINISHED IN {end-start:.2f} s",
-                            state = "completed"
-                        )
-                        return
-
                 latest_utime = pd.to_datetime(df["utime"])\
                     .max().strftime("%Y-%m-%d %H:%M:%S")
 
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
+
                 message = f":material/done_outline: [{end-start:.2f} s] QUERIED {len(df)} ROWS {len(df.columns)} COLS"
                 set_progress(
                     job_id,
@@ -259,10 +253,12 @@ async def run_pipeline(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = ":material/cloud_download: DOWNLOADING UC, FHR LINKS"
                 set_progress(
                     job_id,
                     progress = None,
-                    message = ":material/cloud_download: DOWNLOADING UC, FHR LINKS",
+                    message = message,
                     state = None
                 )
 
@@ -272,6 +268,7 @@ async def run_pipeline(
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
+
                 message = f":material/done_outline: [{end-start:.2f} s] DOWNLOADED {len(uc_results)*2} LINKS"
                 set_progress(
                     job_id,
@@ -305,10 +302,12 @@ async def run_pipeline(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = ":material/conveyor_belt: FILTERING MEASUREMENTS"
                 set_progress(
                     job_id,
                     progress = None,
-                    message = ":material/conveyor_belt: FILTERING MEASUREMENTS",
+                    message = message,
                     state = None
                 )
 
@@ -335,18 +334,50 @@ async def run_pipeline(
                             )
                         )
 
+                skipped_bad_measurements    = skipped_1["bad_measurements"]
+                skipped_no_gest_age         = skipped_1["no_gest_age"]
+                skipped_no_add              = skipped_1["no_actual_delivery"]
+
+                message = f":material/priority_high: {skipped_bad_measurements} ROWS FILTERED DUE TO BAD UC, FHR MEASUREMENTS"
+                set_progress(
+                    job_id,
+                    progress=None,
+                    message=message,
+                    state="None"
+                )
+
+                message = f":material/priority_high: {skipped_no_gest_age} ROWS FILTERED DUE TO NO GESTATIONAL AGE"
+                set_progress(
+                    job_id,
+                    progress=None,
+                    message=message,
+                    state="None"
+                )
+
+                message = f":material/priority_high: {skipped_no_add} ROWS FILTERED DUE TO NO ACTUAL DELIVERY DATE"
+                set_progress(
+                    job_id,
+                    progress = None,
+                    message = message,
+                    state = "None"
+                )
+
                 if len(processed_list_1) == 0:
                     end = time.perf_counter()
+
+                    message = f":material/done_outline: NO ROWS AFTER FILTERING"
                     set_progress(
                         job_id,
                         progress = None,
-                        message = f":material/done_outline: NO ROWS AFTER FILTERING",
+                        message = message,
                         state = "None"
                     )
+
+                    message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s"
                     set_progress(
                         job_id,
                         progress = None,
-                        message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s",
+                        message = message,
                         state = "completed"
                     )
 
@@ -361,6 +392,7 @@ async def run_pipeline(
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
+
                 message = f":material/done_outline: [{end-start:.2f} s] {len(processed_list_1)} ROWS {len(processed_list_1[0])} COLS (FILTERED {skipped_1} ROWS)"
                 set_progress(
                     job_id,
@@ -393,9 +425,11 @@ async def run_pipeline(
                 coll_raw = "rec_raw_data" if data_origin == "rec" else "hist_raw_data"
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = f":material/database_upload: UPLOADING TO MONGODB ({coll_raw})"
                 set_progress(
                     job_id,
-                    message=f":material/database_upload: UPLOADING TO MONGODB ({coll_raw})"
+                    message = message
                 )
 
                 initial_rows = await mongo.count_documents(coll_raw)
@@ -405,6 +439,7 @@ async def run_pipeline(
                 end = time.perf_counter()
                 curr += 1
                 total_time += end - start
+
                 message = f":material/done_outline: [{end-start:.2f} s] UPLOADED {rows_added_raw} ROWS ({coll_raw})"
                 set_progress(
                     job_id,
@@ -438,10 +473,12 @@ async def run_pipeline(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = ":material/conveyor_belt: PROCESSING UC, FHR SIGNALS"
                 set_progress(
                     job_id,
                     progress = None,
-                    message = ":material/conveyor_belt: PROCESSING UC, FHR SIGNALS",
+                    message = message,
                     state = None
                 )
 
@@ -451,20 +488,26 @@ async def run_pipeline(
 
                 if len(processed_list_2) == 0:
                     end = time.perf_counter()
+
+                    message = f":material/done_outline: NO ROWS AFTER PROCESSING"
                     set_progress(
                         job_id,
                         progress = None,
-                        message = f":material/done_outline: NO ROWS AFTER PROCESSING",
+                        message = message,
                         state = "None"
                     )
+
+                    message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s"
                     set_progress(
                         job_id,
                         progress = None,
-                        message = f":material/person_celebrate: PIPELINE FINISHED IN {end - start:.2f} s",
+                        message = message,
                         state = "completed"
                     )
+
                     placeholder["rows"] = 0
                     placeholder["cols"] = 0
+
                     return
 
                 placeholder["rows"] = len(processed_list_2)
@@ -473,6 +516,7 @@ async def run_pipeline(
                 end = time.perf_counter()
                 curr += 1
                 total_time += end - start
+
                 message = f":material/done_outline: [{end-start:.2f} s] {len(processed_list_2)} ROWS {len(processed_list_2[0])} COLS (FILTERED {skipped_2} ROWS)"
                 set_progress(
                     job_id,
@@ -505,11 +549,13 @@ async def run_pipeline(
                 coll_proc = "rec_processed_data" if data_origin == "rec" else "hist_processed_data"
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = f":material/database_upload: UPLOADING TO MONGODB ({coll_proc})"
                 set_progress(
                     job_id,
-                    progress=None,
-                    message=f":material/database_upload: UPLOADING TO MONGODB ({coll_proc})",
-                    state=None
+                    progress = None,
+                    message = message,
+                    state = None
                 )
 
                 initial_rows = await mongo.count_documents(coll_proc)
@@ -519,6 +565,7 @@ async def run_pipeline(
                 end = time.perf_counter()
                 curr += 1
                 total_time += end - start
+
                 message = f":material/done_outline: [{end-start:.2f} s] UPLOADED {rows_added_processed} ROWS ({coll_proc})"
                 set_progress(
                     job_id,
@@ -526,10 +573,11 @@ async def run_pipeline(
                     message = message
                 )
 
+            message = f":material/done_outline: PIPELINE FINISHED IN {total_time:.2f} s"
             set_progress(
                 job_id,
                 progress = None,
-                message = f":material/done_outline: PIPELINE FINISHED IN {total_time:.2f} s",
+                message = message,
                 state   = "completed"
             )
 
@@ -553,9 +601,10 @@ async def run_pipeline(
                 }
             )
 
+            message = f":material/error: Pipeline encountered an error\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}"
             set_progress(
                 job_id,
-                message=f":material/error: Pipeline encountered an error\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}",
+                message = message,
                 state="failed"
             )
 

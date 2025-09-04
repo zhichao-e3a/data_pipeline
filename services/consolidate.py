@@ -7,6 +7,7 @@ from core import states
 from database.MongoDBConnector import MongoDBConnector
 
 from utils.data_consolidate import consolidate, remove_poor
+from utils.feature_extraction import get_extracted_features
 
 from services.notifier import set_progress
 from services.shared import check_cancel
@@ -56,7 +57,7 @@ async def run_consolidate(
         job_id: str
 ) -> None:
 
-    steps       = 4
+    steps       = 5
     curr        = 0
     total_time  = 0
 
@@ -118,7 +119,6 @@ async def run_consolidate(
                     message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
 
                 all_patients = await mongo.get_all_documents(coll_name="patients_unified")
 
@@ -177,7 +177,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
 
                 message = f":material/groups: {len(hist_patients)} HISTORICAL PATIENTS"
                 set_progress(
@@ -186,7 +185,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
 
                 message = f":material/sentiment_satisfied: {valid_patients} VALID PATIENTS"
                 set_progress(
@@ -195,7 +193,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
 
                 message = f":material/done_outline: [{end - start:.2f} s] QUERIED {len(rec_measurements)+len(hist_measurements)} ROWS"
                 set_progress(
@@ -204,7 +201,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
 
                 message = f":material/person_alert: SKIPPED {rec_skipped["no_onset"]+hist_skipped["no_onset"]} DUE TO NO ONSET DATE"
                 set_progress(
@@ -213,7 +209,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
 
                 message = f":material/person_alert: SKIPPED {rec_skipped["c_section"]+hist_skipped["c_section"]} DUE TO C-SECTION"
                 set_progress(
@@ -222,7 +217,6 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
-                await asyncio.sleep(0)
             ######################################## UPLOAD ALL ########################################
             tlog = Ctx(
                 logger = logger.getChild("upload_all"),
@@ -256,7 +250,6 @@ async def run_consolidate(
                     message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
 
                 await mongo.upsert_records_hashed(
                     rec_data + hist_data,
@@ -274,7 +267,6 @@ async def run_consolidate(
                     message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
             ######################################## FILTER ########################################
             tlog = Ctx(
                 logger = logger.getChild("filter"),
@@ -300,19 +292,21 @@ async def run_consolidate(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = ":material/conveyor_belt: FILTERING MEASUREMENTS"
                 set_progress(
                     job_id,
                     progress = None,
-                    message = ":material/conveyor_belt: FILTERING MEASUREMENTS",
+                    message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
 
                 good_measurements, skipped = remove_poor(rec_data + hist_data)
 
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
+
                 message = f":material/done_outline: [{end-start:.2f} s] {len(good_measurements)} ROWS (FILTERED {skipped} ROWS)"
                 set_progress(
                     job_id,
@@ -320,7 +314,52 @@ async def run_consolidate(
                     message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
+                ######################################## EXTRACT FEATURES ########################################
+                tlog = Ctx(
+                    logger=logger.getChild("extract_features"),
+                    extra={
+                        "job_id" : job_id,
+                        "data_origin" : "all",
+                        "task" : "extract_features",
+                        "task_n" : curr
+                    }
+                )
+                tlog.info(
+                    msg="task_start"
+                )
+                with time_block(
+                        lambda ms: tlog.info(
+                            msg="task_end",
+                            extra={
+                                "duration": ms,
+                                "rows_added": None,
+                            }
+                        )
+                ):
+                    start = time.perf_counter()
+                    check_cancel(job_id)
+
+                    message = f":material/database_upload: EXTRACTING FEATURES"
+                    set_progress(
+                        job_id,
+                        message = message
+                    )
+
+                    extracted_measurements = await anyio.to_thread.run_sync(
+                        lambda : get_extracted_features(good_measurements)
+                    )
+
+                    end = time.perf_counter()
+                    curr += 1
+                    total_time += end - start
+
+                    message = f":material/done_outline: [{end - start:.2f} s] FEATURE EXTRACTION DONE"
+                    set_progress(
+                        job_id,
+                        progress=round((curr / steps) * 100),
+                        message=message,
+                        state=None
+                    )
             ######################################## UPLOAD GOOD ########################################
             tlog = Ctx(
                 logger = logger.getChild("upload_good"),
@@ -345,14 +384,15 @@ async def run_consolidate(
             ):
                 start = time.perf_counter()
                 check_cancel(job_id)
+
+                message = f":material/database_upload: UPLOADING TO MONGODB (consolidated_data_good)"
                 set_progress(
                     job_id,
-                    message=f":material/database_upload: UPLOADING TO MONGODB (consolidated_data_good)"
+                    message = message
                 )
-                await asyncio.sleep(0)
 
                 await mongo.upsert_records_hashed(
-                    good_measurements,
+                    extracted_measurements,
                     coll_name = "consolidated_data_good"
                 )
 
@@ -360,24 +400,21 @@ async def run_consolidate(
                 curr += 1
                 total_time += end - start
 
-                message = f":material/done_outline: [{end-start:.2f} s] UPLOADED {len(good_measurements)} ROWS (consolidated_data_good)"
+                message = f":material/done_outline: [{end-start:.2f} s] UPLOADED {len(extracted_measurements)} ROWS (consolidated_data_good)"
                 set_progress(
                     job_id,
                     progress = round((curr/steps)*100),
                     message = message,
                     state = None
                 )
-                await asyncio.sleep(0)
 
+            message = f":material/done_outline: PIPELINE FINISHED IN {total_time:.2f} s"
             set_progress(
                 job_id,
                 progress = None,
-                message = f":material/done_outline: PIPELINE FINISHED IN {total_time:.2f} s",
+                message = message,
                 state   = "completed"
             )
-            await asyncio.sleep(0)
-
-            print("SERVER END OK")
 
         except asyncio.CancelledError:
 
@@ -399,12 +436,12 @@ async def run_consolidate(
                 }
             )
 
+            message = f":material/error: Pipeline encountered an error\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}"
             set_progress(
                 job_id,
-                message=f":material/error: Pipeline encountered an error\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}",
-                state="failed"
+                message = message,
+                state = "failed"
             )
-            await asyncio.sleep(0)
 
             # watermark_log = log_watermark(
             #     pipeline_name=data_origin,

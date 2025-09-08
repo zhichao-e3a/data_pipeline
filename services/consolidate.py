@@ -18,7 +18,7 @@ import asyncio
 import traceback
 from typing import Callable
 
-mongo   = MongoDBConnector(remote=True)
+mongo   = MongoDBConnector(remote=False)
 logger  = logging.getLogger(__name__)
 
 class Ctx(logging.LoggerAdapter):
@@ -69,17 +69,13 @@ async def run_consolidate(
         }
     )
     plog.info(
-        msg     = "consolidate_start",
-        extra   = {
-            "status" : "start"
-        }
+        msg     = "consolidate_start"
     )
 
     with time_block(
             lambda ms: plog.info(
                 msg     = "consolidate_end",
                 extra   = {
-                    "status"     : "end",
                     "duration"   : ms
                 }
             )
@@ -98,14 +94,27 @@ async def run_consolidate(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None, "cols" : None}
+            placeholder = {
+                "n_rec_patients"        : None,
+                "n_hist_patients"       : None,
+                "n_valid_patients"      : None,
+                "n_all_measurements"    : None,
+                "n_valid_measurements"  : None,
+                "n_no_onset"            : None,
+                "n_c_sections"          : None
+            }
             with time_block(
                 lambda ms: tlog.info(
                     msg     = "task_end",
                     extra   = {
-                        "duration"  : ms,
-                        "rows"      : placeholder["rows"],
-                        "cols"      : placeholder["cols"]
+                        "duration"              : ms,
+                        "n_rec_patients"        : placeholder["n_rec_patients"],
+                        "n_hist_patients"       : placeholder["n_hist_patients"],
+                        "n_valid_patients"      : placeholder["n_valid_patients"],
+                        "n_all_measurements"    : placeholder["n_all_measurements"],
+                        "n_valid_measurements"  : placeholder["n_valid_measurements"],
+                        "n_no_onset"            : placeholder["n_no_onset"],
+                        "n_c_sections"          : placeholder["n_c_sections"]
                     }
                 )
             ):
@@ -217,6 +226,14 @@ async def run_consolidate(
                     message=message,
                     state=None
                 )
+
+                placeholder["n_rec_patients"]       = len(rec_patients)
+                placeholder["n_hist_patients"]      = len(hist_patients)
+                placeholder["n_valid_patients"]     = valid_patients
+                placeholder["n_all_measurements"]   = len(rec_measurements)+len(hist_measurements)
+                placeholder["n_no_onset"]           = rec_skipped["no_onset"]+hist_skipped["no_onset"]
+                placeholder["n_c_sections"]         = rec_skipped["c_section"]+hist_skipped["c_section"]
+                placeholder["n_valid_measurements"] = placeholder["n_all_measurements"] - placeholder["n_no_onset"] - placeholder["n_c_sections"]
             ######################################## UPLOAD ALL ########################################
             tlog = Ctx(
                 logger = logger.getChild("upload_all"),
@@ -230,13 +247,15 @@ async def run_consolidate(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None}
+            placeholder = {
+                "rows_added"    : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg     = "task_end",
                         extra   = {
-                            "duration"  : ms,
-                            "rows"   : placeholder["rows"]
+                            "duration"      : ms,
+                            "rows_added"    : placeholder["rows_added"]
                         }
                     )
             ):
@@ -255,6 +274,8 @@ async def run_consolidate(
                     rec_data + hist_data,
                     coll_name = "consolidated_data"
                 )
+
+                placeholder["rows_added"] = len(rec_data) + len(hist_data)
 
                 end = time.perf_counter()
                 curr += 1
@@ -280,13 +301,17 @@ async def run_consolidate(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None}
+            placeholder = {
+                "rows_remaining": None,
+                "rows_removed": None,
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra = {
-                            "duration"  : ms,
-                            "rows"      : placeholder["rows"]
+                            "duration"          : ms,
+                            "rows_remaining"    : placeholder["rows_remaining"],
+                            "rows_removed"      : placeholder["rows_removed"],
                         }
                     )
             ):
@@ -303,6 +328,9 @@ async def run_consolidate(
 
                 good_measurements, skipped = remove_poor(rec_data + hist_data)
 
+                placeholder["rows_remaining"]   = len(good_measurements)
+                placeholder["rows_removed"]     = skipped
+
                 end = time.perf_counter()
                 curr += 1
                 total_time += end-start
@@ -314,52 +342,51 @@ async def run_consolidate(
                     message = message,
                     state = None
                 )
-                ######################################## EXTRACT FEATURES ########################################
-                tlog = Ctx(
-                    logger=logger.getChild("extract_features"),
-                    extra={
-                        "job_id" : job_id,
-                        "data_origin" : "all",
-                        "task" : "extract_features",
-                        "task_n" : curr
-                    }
+            ######################################## EXTRACT FEATURES ########################################
+            tlog = Ctx(
+                logger=logger.getChild("extract_features"),
+                extra={
+                    "job_id" : job_id,
+                    "data_origin" : "all",
+                    "task" : "extract_features",
+                    "task_n" : curr
+                }
+            )
+            tlog.info(
+                msg="task_start"
+            )
+            with time_block(
+                    lambda ms: tlog.info(
+                        msg="task_end",
+                        extra={
+                            "duration": ms,
+                        }
+                    )
+            ):
+                start = time.perf_counter()
+                check_cancel(job_id)
+
+                message = f":material/database_upload: EXTRACTING FEATURES"
+                set_progress(
+                    job_id,
+                    message = message
                 )
-                tlog.info(
-                    msg="task_start"
+
+                extracted_measurements = await anyio.to_thread.run_sync(
+                    lambda : get_extracted_features(good_measurements)
                 )
-                with time_block(
-                        lambda ms: tlog.info(
-                            msg="task_end",
-                            extra={
-                                "duration": ms,
-                                "rows_added": None,
-                            }
-                        )
-                ):
-                    start = time.perf_counter()
-                    check_cancel(job_id)
 
-                    message = f":material/database_upload: EXTRACTING FEATURES"
-                    set_progress(
-                        job_id,
-                        message = message
-                    )
+                end = time.perf_counter()
+                curr += 1
+                total_time += end - start
 
-                    extracted_measurements = await anyio.to_thread.run_sync(
-                        lambda : get_extracted_features(good_measurements)
-                    )
-
-                    end = time.perf_counter()
-                    curr += 1
-                    total_time += end - start
-
-                    message = f":material/done_outline: [{end - start:.2f} s] FEATURE EXTRACTION DONE"
-                    set_progress(
-                        job_id,
-                        progress=round((curr / steps) * 100),
-                        message=message,
-                        state=None
-                    )
+                message = f":material/done_outline: [{end - start:.2f} s] FEATURE EXTRACTION DONE"
+                set_progress(
+                    job_id,
+                    progress=round((curr / steps) * 100),
+                    message=message,
+                    state=None
+                )
             ######################################## UPLOAD GOOD ########################################
             tlog = Ctx(
                 logger = logger.getChild("upload_good"),
@@ -373,12 +400,15 @@ async def run_consolidate(
             tlog.info(
                 msg = "task_start"
             )
+            placeholder = {
+                "rows_added" : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra = {
                             "duration"      : ms,
-                            "rows_added"    : None,
+                            "rows_added"    : placeholder["rows_added"]
                         }
                     )
             ):
@@ -395,6 +425,8 @@ async def run_consolidate(
                     extracted_measurements,
                     coll_name = "consolidated_data_good"
                 )
+
+                placeholder["rows_added"] = len(extracted_measurements)
 
                 end = time.perf_counter()
                 curr += 1

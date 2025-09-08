@@ -23,7 +23,7 @@ from datetime import datetime
 from typing import Callable
 
 db      = SQLDBConnector()
-mongo   = MongoDBConnector(remote=True)
+mongo   = MongoDBConnector(remote=False)
 logger  = logging.getLogger(__name__)
 
 class Ctx(logging.LoggerAdapter):
@@ -76,16 +76,12 @@ async def run_pipeline(
     )
     plog.info(
         msg     = "pipeline_start",
-        extra   = {
-            "status" : "start"
-        }
     )
 
     with time_block(
             lambda ms: plog.info(
                 msg     = "pipeline_end",
                 extra   = {
-                    "status"     : "end",
                     "duration"   : ms
                 }
             )
@@ -104,14 +100,14 @@ async def run_pipeline(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None, "cols" : None}
+            placeholder = {"rows_queried" : None, "cols_queried" : None}
             with time_block(
                 lambda ms: tlog.info(
                     msg     = "task_end",
                     extra   = {
-                        "duration"  : ms,
-                        "rows"      : placeholder["rows"],
-                        "cols"      : placeholder["cols"]
+                        "duration"      : ms,
+                        "rows_queried"  : placeholder["rows_queried"],
+                        "cols_queried"  : placeholder["cols_queried"]
                     }
                 )
             ):
@@ -173,6 +169,8 @@ async def run_pipeline(
                         )
                     )
 
+                placeholder["rows_queried"] = len(df)
+
                 if len(df) == 0:
 
                     end = time.perf_counter()
@@ -193,13 +191,12 @@ async def run_pipeline(
                         state="completed"
                     )
 
-                    placeholder["rows"] = 0
-                    placeholder["cols"] = 0
+                    placeholder["cols_queried"] = 0
 
                     return
 
-                placeholder["rows"] = len(df)
-                placeholder["cols"] = len(df.columns)
+                else:
+                    placeholder["cols_queried"] = len(df.columns)
 
                 if data_origin == "rec":
                     last_menstrual      = {
@@ -241,13 +238,13 @@ async def run_pipeline(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"n_links" : None}
+            placeholder = {"links_downloaded" : None}
             with time_block(
                     lambda ms: tlog.info(
                         msg     = "task_end",
                         extra   = {
-                            "duration"  : ms,
-                            "n_links"   : placeholder["n_links"]
+                            "duration"          : ms,
+                            "links_downloaded"  : placeholder["links_downloaded"]
                         }
                     )
             ):
@@ -263,7 +260,7 @@ async def run_pipeline(
                 )
 
                 uc_results, fhr_results = await async_process_urls(df)
-                placeholder["n_links"] = len(uc_results)*2
+                placeholder["links_downloaded"] = len(uc_results)*2
 
                 end = time.perf_counter()
                 curr += 1
@@ -282,21 +279,30 @@ async def run_pipeline(
                 extra = {
                     "job_id"        : job_id,
                     "data_origin"   : data_origin,
-                    "task"          : "filter",
+                    "task"          : "filter_rows",
                     "task_n"        : curr
                 }
             )
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None, "cols" : None}
+            placeholder = {
+                "rows_remaining"    : None,
+                "cols_remaining"    : None,
+                "rows_removed"      : None,
+                "no_gest_age"       : None,
+                "bad_measurements"  : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra = {
-                            "duration"  : ms,
-                            "rows"      : placeholder["rows"],
-                            "cols"      : placeholder["cols"]
+                            "duration"          : ms,
+                            "rows_remaining"    : placeholder["rows_remaining"],
+                            "cols_remaining"    : placeholder["cols_remaining"],
+                            "rows_removed"      : placeholder["rows_removed"],
+                            "no_gest_age"       : placeholder["no_gest_age"],
+                            "bad_measurements"  : placeholder["bad_measurements"]
                         }
                     )
             ):
@@ -353,6 +359,11 @@ async def run_pipeline(
                     state="None"
                 )
 
+                placeholder["rows_remaining"]   = len(processed_list_1)
+                placeholder["rows_removed"]     = skipped_bad_measurements + skipped_no_gest_age
+                placeholder["no_gest_age"]      = skipped_no_gest_age
+                placeholder["bad_measurements"] = skipped_bad_measurements
+
                 if len(processed_list_1) == 0:
                     end = time.perf_counter()
 
@@ -372,13 +383,12 @@ async def run_pipeline(
                         state = "completed"
                     )
 
-                    placeholder["rows"] = 0
-                    placeholder["cols"] = 0
+                    placeholder["cols_remaining"] = 0
 
                     return
 
-                placeholder["rows"] = len(processed_list_1)
-                placeholder["cols"] = len(processed_list_1[0])
+                else:
+                    placeholder["cols_remaining"] = len(processed_list_1[0])
 
                 end = time.perf_counter()
                 curr += 1
@@ -404,12 +414,19 @@ async def run_pipeline(
             tlog.info(
                 msg = "task_start"
             )
+            placeholder = {
+                "n_rows_before" : None,
+                "rows_added"    : None,
+                "n_rows_after"  : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra = {
                             "duration"      : ms,
-                            "rows_added"    : len(rows_added_raw) if rows_added_raw in locals() else None,
+                            "n_rows_before" : placeholder["n_rows_before"],
+                            "rows_added"    : placeholder["rows_added"],
+                            "n_rows_after"  : placeholder["n_rows_after"]
                         }
                     )
             ):
@@ -426,6 +443,10 @@ async def run_pipeline(
                 initial_rows = await mongo.count_documents(coll_raw)
                 rows_added_raw = len(processed_list_1) - initial_rows
                 await mongo.upsert_records_hashed(processed_list_1, coll_raw)
+
+                placeholder["n_rows_before"]    = initial_rows
+                placeholder["rows_added"]       = rows_added_raw
+                placeholder["n_rows_after"]     = initial_rows + rows_added_raw
 
                 end = time.perf_counter()
                 curr += 1
@@ -451,14 +472,19 @@ async def run_pipeline(
             tlog.info(
                 msg = "task_start"
             )
-            placeholder = {"rows" : None, "cols" : None}
+            placeholder = {
+                "rows_remaining"    : None,
+                "cols_remaining"    : None,
+                "rows_removed"      : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra = {
-                            "duration" : ms,
-                            "rows" : placeholder["rows"],
-                            "cols" : placeholder["cols"]
+                            "duration"          : ms,
+                            "rows_remaining"    : placeholder["rows_remaining"],
+                            "cols_remaining"    : placeholder["cols_remaining"],
+                            "rows_removed"      : placeholder["rows_removed"]
                         }
                     )
             ):
@@ -476,6 +502,9 @@ async def run_pipeline(
                 processed_list_2, skipped_2 = await anyio.to_thread.run_sync(
                     lambda: process_signals(processed_list_1)
                 )
+
+                placeholder["rows_remaining"] = len(processed_list_2)
+                placeholder["rows_removed"] = skipped_2
 
                 if len(processed_list_2) == 0:
                     end = time.perf_counter()
@@ -496,13 +525,13 @@ async def run_pipeline(
                         state = "completed"
                     )
 
-                    placeholder["rows"] = 0
-                    placeholder["cols"] = 0
+
+                    placeholder["cols_remaining"]   = 0
 
                     return
 
-                placeholder["rows"] = len(processed_list_2)
-                placeholder["cols"] = len(processed_list_2[0])
+                else:
+                    placeholder["cols_remaining"] = len(processed_list_2[0])
 
                 end = time.perf_counter()
                 curr += 1
@@ -528,12 +557,19 @@ async def run_pipeline(
             tlog.info(
                 msg = "task_start"
             )
+            placeholder = {
+                "n_rows_before" : None,
+                "rows_added"    : None,
+                "n_rows_after"  : None
+            }
             with time_block(
                     lambda ms: tlog.info(
                         msg = "task_end",
                         extra={
                             "duration"      : ms,
-                            "rows_added"    : len(rows_added_processed) if rows_added_processed in locals() else None
+                            "n_rows_before" : placeholder["n_rows_before"],
+                            "rows_added"    : placeholder["rows_added"],
+                            "n_rows_after"  : placeholder["n_rows_after"]
                         }
                     )
             ):
@@ -552,6 +588,10 @@ async def run_pipeline(
                 initial_rows = await mongo.count_documents(coll_proc)
                 rows_added_processed = len(processed_list_2) - initial_rows
                 await mongo.upsert_records_hashed(processed_list_2, coll_proc)
+
+                placeholder["n_rows_before"]    = initial_rows
+                placeholder["rows_added"]       = rows_added_processed
+                placeholder["n_rows_after"]     = initial_rows + rows_added_processed
 
                 end = time.perf_counter()
                 curr += 1

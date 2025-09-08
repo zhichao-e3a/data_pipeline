@@ -30,12 +30,26 @@ class JsonFormatter(logging.Formatter):
             "task",
             "task_n",
             "duration",
-            "rows",
-            "cols",
-            "n_links",
+            "rows_queried",
+            "cols_queried",
+            "links_downloaded",
+            "rows_remaining",
+            "cols_remaining",
+            "rows_removed",
+            "no_gest_age",
+            "bad_measurements",
+            "n_rows_before",
             "rows_added",
-            "error",
-            "cancelled"
+            "n_rows_after",
+            "n_rec_patients",
+            "n_hist_patients",
+            "n_valid_patients",
+            "n_all_measurements",
+            "n_valid_measurements",
+            "n_no_onset",
+            "n_c_sections",
+            "cancelled",
+            "error"
         ):
 
             v = getattr(record, k, None)

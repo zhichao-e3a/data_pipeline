@@ -43,13 +43,13 @@ def process_data(
 
         if data_origin == "rec":
 
-            expected_delivery   = datetime.strptime(
-                kwargs["expected_delivery"][mobile], "%Y-%m-%d"
-            ).strftime("%Y-%m-%d %H:%M:%S")
+            expected_delivery = kwargs["expected_delivery"][mobile]
+            actual_delivery   = kwargs["actual_delivery"][mobile]
 
-            actual_delivery = kwargs["actual_delivery"][mobile]
+            data["expected_delivery"]   = datetime.strptime(
+                expected_delivery, "%Y-%m-%d"
+            ).strftime("%Y-%m-%d %H:%M:%S") if expected_delivery else None
 
-            data["expected_delivery"]   = expected_delivery
             data["actual_delivery"]     = actual_delivery
 
         elif data_origin == "hist":

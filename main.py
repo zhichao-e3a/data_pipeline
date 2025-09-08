@@ -14,7 +14,7 @@ async def lifespan(
     states.LOOP = __import__("asyncio").get_event_loop()
 
     states.LOG_LISTEN = setup_logging(
-        remote = True
+        remote = False
     )
 
     yield

@@ -441,7 +441,7 @@ async def run_pipeline(
                 )
 
                 initial_rows = await mongo.count_documents(coll_raw)
-                rows_added_raw = len(processed_list_1) - initial_rows
+                rows_added_raw = len(processed_list_1)
                 await mongo.upsert_records_hashed(processed_list_1, coll_raw)
 
                 placeholder["n_rows_before"]    = initial_rows
@@ -586,7 +586,7 @@ async def run_pipeline(
                 )
 
                 initial_rows = await mongo.count_documents(coll_proc)
-                rows_added_processed = len(processed_list_2) - initial_rows
+                rows_added_processed = len(processed_list_2)
                 await mongo.upsert_records_hashed(processed_list_2, coll_proc)
 
                 placeholder["n_rows_before"]    = initial_rows

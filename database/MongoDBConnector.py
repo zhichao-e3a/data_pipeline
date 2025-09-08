@@ -65,54 +65,6 @@ class MongoDBConnector:
             await asyncio.sleep(0.5)
             await coll.bulk_write(ops, ordered=False)
 
-    async def upsert_records(self, records, coll_name, batch_size=500):
-
-        async with self.resource(coll_name) as coll:
-
-            if coll_name == "logs":
-
-                _id = records.get("job_id")
-                to_insert = dict(records)
-                to_insert.pop("job_id")
-
-                to_insert = UpdateOne(
-                    {"_id": _id},
-                    {"$set": to_insert},
-                    upsert=True
-                )
-
-                await self.flush(coll, [to_insert])
-
-            elif coll_name == "consolidated_patients":
-
-                ops = []
-
-                for item in records:
-
-                    _id = item.get("contact")
-                    to_insert = dict(item)
-                    to_insert.pop("contact")
-
-                    to_insert.setdefault(
-                        "fetched_at",
-                        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                    )
-
-                    op = UpdateOne(
-                        {"_id": _id},
-                        {"$set": to_insert},
-                        upsert=True
-                    )
-
-                    ops.append(op)
-
-                    if len(ops) >= batch_size:
-                        await self.flush(coll, ops)
-                        ops = []
-
-                if ops:
-                    await self.flush(coll, ops)
-
     async def count_documents(self, coll_name, count_filter=None):
 
         async with self.resource(coll_name) as coll:
@@ -147,7 +99,9 @@ class MongoDBConnector:
 
             clean = {
                 k:v for k,v in obj.items() if k in {
-                    "uc", "fhr", "gest_age", "expected_delivery", "actual_delivery"
+                    "expected_delivery",
+                    "actual_delivery",
+                    "onset"
                 }
             }
 
@@ -155,7 +109,9 @@ class MongoDBConnector:
 
             clean = {
                 k: v for k, v in obj.items() if k in {
-                    "last_utime", "last_job_id", "time"
+                    "last_utime",
+                    "last_job_id",
+                    "time"
                 }
             }
 

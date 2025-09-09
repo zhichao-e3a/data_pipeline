@@ -85,12 +85,12 @@ class MongoHandler(logging.Handler):
             pass
 
 def setup_logging(
-    remote : bool
+    mode : str
 ):
 
-    if remote:
+    if mode == "remote":
         config = DEFAULT_MONGO_CONFIG
-    else:
+    elif mode == "local":
         config = MONGO_CONFIG
 
     # Infinite queue handler

@@ -13,15 +13,15 @@ from pymongo.errors import AutoReconnect, BulkWriteError
 
 class MongoDBConnector:
 
-    def __init__(self, remote):
+    def __init__(self, mode):
 
-        self.remote = remote
+        self.mode = mode
 
     def build_client(self):
 
-        if self.remote:
+        if self.mode == "remote":
             config = DEFAULT_MONGO_CONFIG
-        else:
+        elif self.mode == "local":
             config = MONGO_CONFIG
 
         return AsyncIOMotorClient(
@@ -35,9 +35,9 @@ class MongoDBConnector:
 
         client = self.build_client()
 
-        if self.remote:
+        if self.mode == "remote":
             config = DEFAULT_MONGO_CONFIG
-        else:
+        elif self.mode == "local":
             config = MONGO_CONFIG
 
         try:

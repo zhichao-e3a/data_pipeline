@@ -12,13 +12,14 @@ from utils.feature_extraction import get_extracted_features
 from services.notifier import set_progress
 from services.shared import check_cancel
 
+import os
 import time
 import logging
 import asyncio
 import traceback
 from typing import Callable
 
-mongo   = MongoDBConnector(remote=False)
+mongo   = MongoDBConnector(mode=os.getenv("MODE"))
 logger  = logging.getLogger(__name__)
 
 class Ctx(logging.LoggerAdapter):

@@ -13,6 +13,7 @@ from utils.signal_processing import process_signals
 from services.notifier import set_progress
 from services.shared import check_cancel, log_watermark
 
+import os
 import time
 import logging
 import anyio
@@ -23,7 +24,7 @@ from datetime import datetime
 from typing import Callable
 
 db      = SQLDBConnector()
-mongo   = MongoDBConnector(remote=False)
+mongo   = MongoDBConnector(mode=os.getenv("MODE"))
 logger  = logging.getLogger(__name__)
 
 class Ctx(logging.LoggerAdapter):

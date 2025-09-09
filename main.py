@@ -1,3 +1,5 @@
+import os
+
 from api.v1.router import api_router
 from core import states
 from core.middleware import install_middleware
@@ -14,7 +16,7 @@ async def lifespan(
     states.LOOP = __import__("asyncio").get_event_loop()
 
     states.LOG_LISTEN = setup_logging(
-        remote = False
+        mode = os.getenv("MODE")
     )
 
     yield

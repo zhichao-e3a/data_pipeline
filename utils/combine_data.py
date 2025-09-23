@@ -1,6 +1,4 @@
-import json
 import pandas as pd
-from pathlib import Path
 
 def combine_data(measurements, patients):
 

@@ -2,7 +2,7 @@ from config.configs import MONGO_CONFIG, DEFAULT_MONGO_CONFIG
 
 import json
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
 from contextlib import asynccontextmanager
 
 import asyncio

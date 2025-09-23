@@ -1,7 +1,6 @@
 from core import states
 
 import asyncio
-from datetime import datetime
 
 def check_cancel(
         job_id: str
@@ -20,8 +19,7 @@ def log_watermark(
 
         "pipeline_name" : pipeline_name,
         "last_utime"    : utime,
-        "last_job_id"   : job_id,
-        "time"          : datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+        "last_job_id"   : job_id
     }
 
     return log

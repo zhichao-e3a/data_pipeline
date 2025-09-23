@@ -63,6 +63,6 @@ class SQLDBConnector:
             finally:
                 engine.dispose()
 
-    def query_to_dataframe(self, sql, chunksize=None):
+    def query_to_dataframe(self, query, chunksize=None):
         with self.connect() as engine:
-            return pd.read_sql(sql, engine, chunksize=chunksize)
+            return pd.read_sql(query, engine, chunksize=chunksize)

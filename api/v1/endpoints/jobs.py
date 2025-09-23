@@ -1,7 +1,7 @@
 from core import states
 from schemas.pipeline import ResponseModel
-from services.pipeline import run_pipeline
-from services.consolidate import run_consolidate
+from services.run_pipeline import run_pipeline
+from services.run_consolidate import run_consolidate
 
 import uuid
 from fastapi import APIRouter, BackgroundTasks

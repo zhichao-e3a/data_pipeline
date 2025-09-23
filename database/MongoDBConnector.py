@@ -99,9 +99,11 @@ class MongoDBConnector:
 
             clean = {
                 k:v for k,v in obj.items() if k in {
-                    "expected_delivery",
-                    "actual_delivery",
-                    "onset"
+                    "edd",
+                    "add",
+                    "onset",
+                    "annotations",
+                    "notes"
                 }
             }
 
@@ -111,7 +113,6 @@ class MongoDBConnector:
                 k: v for k, v in obj.items() if k in {
                     "last_utime",
                     "last_job_id",
-                    "time"
                 }
             }
 
@@ -121,7 +122,6 @@ class MongoDBConnector:
 
         return hashlib.sha1(blob).hexdigest()
 
-
     async def upsert_records_hashed(self, records, coll_name, batch_size=500):
 
         async with self.resource(coll_name) as coll:
@@ -130,15 +130,27 @@ class MongoDBConnector:
 
             for item in records:
 
+                to_insert = dict(item)
+
                 if coll_name == "watermarks":
-                    to_insert = dict(item)
+
                     _id = item["pipeline_name"]
+
                     to_insert.pop("pipeline_name")
+
                     h = await asyncio.to_thread(self._fingerprint, to_insert, "watermark")
+
                 else:
-                    to_insert = dict(item)
-                    _id = item.get("row_id")
-                    to_insert.pop("row_id")
+
+                    _id = item.get("_id")
+
+                    to_insert.pop("_id")
+
+                    try:
+                        to_insert.pop("doc_hash"); to_insert.pop('utime') ; to_insert.pop('ctime')
+                    except KeyError:
+                        pass
+
                     h = await asyncio.to_thread(self._fingerprint, to_insert, "measurement")
 
                 op = UpdateOne(
@@ -161,11 +173,11 @@ class MongoDBConnector:
                     {
                         "$set" : {
                             **to_insert,
-                            "doc_hash"      : h,
-                            "fetched_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                            "doc_hash" : h,
+                            "utime"    : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         },
                         "$setOnInsert": {
-                            "created_at"    : datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                            "ctime" : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         }
                     },
                     upsert=True
@@ -179,3 +191,16 @@ class MongoDBConnector:
 
             if ops:
                 await self.flush(coll, ops)
+
+    async def delete_document(self, coll_name, query):
+
+        async with self.resource(coll_name) as coll:
+
+            try:
+                res = await coll.delete_one(query)
+                return res.deleted_count
+
+            except AutoReconnect:
+                await asyncio.sleep(0.5)
+                res = await coll.delete_one(query)
+                return res.deleted_count

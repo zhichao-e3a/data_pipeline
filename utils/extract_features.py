@@ -12,6 +12,7 @@ def _percentile_bt(series, pct=10):
     h, bins = np.histogram(series, bins=np.arange(series.min(), series.max() + 2))
     cdf = np.cumsum(h) / h.sum()
     idx = np.searchsorted(cdf, pct / 100)
+
     return bins[idx]
 
 def _bt_series(uc_vals, fs=1):
@@ -44,13 +45,13 @@ def compute_fhr_baseline(fhr, fs=1, cutoff=0.005):
 
     return baseline
 
-def get_extracted_features(data):
+def extract_features(data):
 
     extracted = []
 
     for row in tqdm(data):
 
-        uc = np.array(row["uc"])
+        uc = np.array(row["uc"], dtype=np.float64)
 
         # Total AUC
         total_auc       = float(trapezoid(uc, dx=1))
@@ -64,13 +65,14 @@ def get_extracted_features(data):
 
         extracted.append(
             {
-                "row_id"            : row["row_id"],
+                "_id"               : row["_id"],
                 "mobile"            : row["mobile"],
                 "measurement_date"  : row["measurement_date"],
+                "start_test_ts"     : row["start_test_ts"],
                 "uc"                : row["uc"],
                 "fhr"               : row["fhr"],
-                "expected_delivery" : row["expected_delivery"],
-                "actual_delivery"   : row["actual_delivery"],
+                "edd"               : row["edd"],
+                "add"               : row["add"],
                 "onset"             : row["onset"],
                 "gest_age"          : row["gest_age"],
                 "total_auc"         : total_auc,

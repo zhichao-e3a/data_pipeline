@@ -19,6 +19,7 @@ def install_middleware(app: FastAPI) -> None:
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=[
+            "aibeta.e3ahealth.com",
             "localhost",
             "127.0.0.1",
             "[::1]",

@@ -189,9 +189,9 @@ async def query(
 
         # Upsert records to MongoDB
         if origin == 'hist':
-            await mongo.upsert_records_hashed(record_list, coll_name = 'raw_hist')
+            await mongo.upsert_documents_hashed(record_list, coll_name = 'raw_hist')
         elif origin == 'rec':
-            await mongo.upsert_records_hashed(record_list, coll_name = 'raw_rec')
+            await mongo.upsert_documents_hashed(record_list, coll_name = 'raw_rec')
 
         # Update watermark only if there were records fetched
         latest_utime = pd.to_datetime(df["utime"]) \
@@ -204,7 +204,7 @@ async def query(
         )
 
         # Upsert watermark to MongoDB
-        await mongo.upsert_records_hashed([watermark_log], "watermarks")
+        await mongo.upsert_documents_hashed([watermark_log], "watermarks")
 
     return {
         'n_rows' : len(record_list),

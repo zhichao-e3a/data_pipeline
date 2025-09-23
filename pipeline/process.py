@@ -27,51 +27,65 @@ async def process(
     last_utime = curr_watermark[0]['last_utime']
 
     if origin == 'hist':
-        filt_records = await mongo.get_all_documents(
-            coll_name = 'filt_hist',
+        filt_records = mongo.stream_all_documents(
+            coll_name = "filt_hist",
             query = {
-                'utime' : {
-                    '$gt': last_utime
+                'utime': {
+                    '$gt': last_utime,
                 }
-            }
+            },
+            sort=[
+                ("utime", 1),
+                ("_id", 1)
+            ]
         )
+
     elif origin == 'rec':
-        filt_records = await mongo.get_all_documents(
-            coll_name = 'filt_rec',
-            query = {
-                'utime' : {
-                    '$gt': last_utime
+        filt_records = mongo.stream_all_documents(
+            coll_name="filt_rec",
+            query={
+                'utime': {
+                    '$gt': last_utime,
                 }
-            }
+            },
+            sort=[
+                ("utime", 1),
+                ("_id", 1)
+            ]
         )
 
-    proc_records, skipped = await anyio.to_thread.run_sync(
-        lambda : process_signals(filt_records)
-    )
+    total_records = 0
+    total_skipped = 0
+    async for batch in filt_records:
 
-    if len(proc_records) > 0:
+        batch_max_utime = batch[-1]["utime"]
 
-        if origin == 'hist':
-            await mongo.upsert_records_hashed(proc_records, coll_name = 'proc_hist')
+        proc_records, skipped = await anyio.to_thread.run_sync(
+            lambda : process_signals(batch)
+        )
 
-        elif origin == 'rec':
-            await mongo.upsert_records_hashed(proc_records, coll_name = 'proc_rec')
+        total_skipped += skipped
 
-        # Update watermark only if there were records fetched
-        filt_utime = [i['utime'] for i in filt_records]
-        latest_utime = max(filt_utime)
+        if len(proc_records) > 0:
+
+            total_records += len(proc_records)
+
+            if origin == 'hist':
+                await mongo.upsert_documents_hashed(proc_records, coll_name = 'proc_hist')
+
+            elif origin == 'rec':
+                await mongo.upsert_documents_hashed(proc_records, coll_name = 'proc_rec')
 
         watermark_log = log_watermark(
             pipeline_name=f'filt_{origin}',
-            utime=latest_utime,
+            utime=batch_max_utime,
             job_id=job_id
         )
 
         # Upsert watermark to MongoDB
-        await mongo.upsert_records_hashed([watermark_log], "watermarks")
+        await mongo.upsert_documents_hashed([watermark_log], "watermarks")
 
     return {
-        'n_rows'        : len(proc_records),
-        'n_cols'        : len(proc_records[0]) if len(proc_records) > 0 else 0,
-        'rows_skipped'  : skipped
+        'n_rows'        : total_records,
+        'rows_skipped'  : total_skipped
     }

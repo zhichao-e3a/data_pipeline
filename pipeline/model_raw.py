@@ -59,7 +59,7 @@ async def model_raw(
         lambda : extract_features(rec_data+hist_data)
     )
 
-    await mongo.upsert_records_hashed(
+    await mongo.upsert_documents_hashed(
         extracted_data,
         coll_name="model_data_raw"
     )

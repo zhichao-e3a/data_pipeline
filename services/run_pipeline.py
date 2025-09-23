@@ -183,7 +183,6 @@ async def run_pipeline(
             )
             placeholder = {
                 "rows_remaining"    : None,
-                "cols_remaining"    : None,
                 "rows_removed"      : None,
                 "no_gest_age"       : None,
                 "bad_measurements"  : None
@@ -194,7 +193,6 @@ async def run_pipeline(
                         extra = {
                             "duration"          : ms,
                             "rows_remaining"    : placeholder["rows_remaining"],
-                            "cols_remaining"    : placeholder["cols_remaining"],
                             "rows_removed"      : placeholder["rows_removed"],
                             "no_gest_age"       : placeholder["no_gest_age"],
                             "bad_measurements"  : placeholder["bad_measurements"]
@@ -219,13 +217,11 @@ async def run_pipeline(
                 )
 
                 rows_remaining = metadata_2["n_rows"]
-                cols_remaining = metadata_2["n_cols"]
                 bad_uc_fhr     = metadata_2["bad_uc_fhr"]
                 no_gest_age    = metadata_2["no_gest_age"]
                 rows_removed   = bad_uc_fhr + no_gest_age
 
                 placeholder["rows_remaining"]   = rows_remaining
-                placeholder["cols_remaining"]   = cols_remaining
                 placeholder["bad_measurements"] = bad_uc_fhr
                 placeholder["no_gest_age"]      = no_gest_age
                 placeholder["rows_removed"]     = rows_removed
@@ -272,7 +268,7 @@ async def run_pipeline(
                 curr += 1
                 total_time += end-start
 
-                message = f":material/done_outline: [{end-start:.2f} s] {rows_remaining} ROWS {cols_remaining} COLS (FILTERED {rows_removed} ROWS)"
+                message = f":material/done_outline: [{end-start:.2f} s] {rows_remaining} ROWS (FILTERED {rows_removed} ROWS)"
                 set_progress(
                     job_id,
                     progress = round((curr/steps)*100),
@@ -295,7 +291,6 @@ async def run_pipeline(
             )
             placeholder = {
                 "rows_remaining"    : None,
-                "cols_remaining"    : None,
                 "rows_removed"      : None
             }
             with time_block(
@@ -304,7 +299,6 @@ async def run_pipeline(
                         extra = {
                             "duration"          : ms,
                             "rows_remaining"    : placeholder["rows_remaining"],
-                            "cols_remaining"    : placeholder["cols_remaining"],
                             "rows_removed"      : placeholder["rows_removed"]
                         }
                     )
@@ -327,11 +321,9 @@ async def run_pipeline(
                 )
 
                 rows_remaining  = metadata_3["n_rows"]
-                cols_remaining  = metadata_3["n_cols"]
                 rows_removed    = metadata_3["rows_skipped"]
 
                 placeholder["rows_remaining"]   = rows_remaining
-                placeholder["cols_remaining"]   = cols_remaining
                 placeholder["rows_removed"]     = rows_removed
 
                 if rows_remaining == 0:
@@ -359,7 +351,7 @@ async def run_pipeline(
                 curr += 1
                 total_time += end - start
 
-                message = f":material/done_outline: [{end-start:.2f} s] {rows_remaining} ROWS {cols_remaining} COLS (FILTERED {rows_removed} ROWS)"
+                message = f":material/done_outline: [{end-start:.2f} s] {rows_remaining} ROWS (FILTERED {rows_removed} ROWS)"
                 set_progress(
                     job_id,
                     progress = round((curr/steps)*100),

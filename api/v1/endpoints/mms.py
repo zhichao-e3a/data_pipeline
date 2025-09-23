@@ -33,7 +33,7 @@ async def upsert_annotation(payload: AnnotationPayload):
         'notes'             : notes
     }
 
-    await mongo.upsert_records_hashed([record], coll_name='traceannotations')
+    await mongo.upsert_documents_hashed([record], coll_name='traceannotations')
 
     return {"status": "OK"}
 
@@ -70,7 +70,7 @@ async def insert_bad_measurement(payload: BadMeasurementPayload):
         'mobile' : mobile,
     }
 
-    await mongo.upsert_records_hashed([record], coll_name='bad_measurements')
+    await mongo.upsert_documents_hashed([record], coll_name='bad_measurements')
 
     return {"status": "OK"}
 

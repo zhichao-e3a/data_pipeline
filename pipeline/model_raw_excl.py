@@ -16,7 +16,7 @@ async def model_raw_excl(
         lambda : remove_data(all_measurements)
     )
 
-    await mongo.upsert_records_hashed(
+    await mongo.upsert_documents_hashed(
         good_measurements,
         coll_name = 'model_data_raw_excl'
     )

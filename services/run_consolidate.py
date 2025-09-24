@@ -281,11 +281,3 @@ async def run_consolidate(
                 message = message,
                 state = "failed"
             )
-
-            # watermark_log = log_watermark(
-            #     pipeline_name=data_origin,
-            #     utime=latest_utime,
-            #     job_id=job_id,
-            # )
-            #
-            # await mongo.upsert_records_hashed([watermark_log], "watermarks")

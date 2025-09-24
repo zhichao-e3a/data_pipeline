@@ -55,10 +55,10 @@ class MongoDBConnector:
 
             self,
             coll_name   : str,
-            query       : Dict[str, Any] = {},
+            query       : Optional[Dict[str, Any]] = {},
             projection  : Optional[Dict[str, int]] = None,
             sort        : Optional[List[Tuple[str, int]]] = None,
-            batch_size  : int = 10_000
+            batch_size  : Optional[int] = 10_000
 
     ) -> AsyncIterator[List[Dict[str, Any]]]:
 

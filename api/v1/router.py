@@ -1,4 +1,4 @@
-from api.v1.endpoints import jobs, ws, mms
+from api.v1.endpoints import jobs, ws, mms, ml
 from fastapi import APIRouter
 
 api_router = APIRouter(
@@ -11,3 +11,5 @@ api_router.include_router(jobs.router)
 api_router.include_router(ws.router)
 
 api_router.include_router(mms.router)
+
+api_router.include_router(ml.router)

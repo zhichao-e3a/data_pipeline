@@ -6,7 +6,7 @@ from services.run_consolidate import run_consolidate
 import uuid
 from fastapi import APIRouter, BackgroundTasks
 
-router = APIRouter(prefix="/api", tags=["jobs"])
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 @router.post(
     path="/pipeline_job/{data_origin}",

@@ -41,10 +41,12 @@ async def download_gz(
     session,
     max_retries,
     url_indexed,
-    link_type
 ):
 
     idx, url = url_indexed[0], url_indexed[1]
+
+    if url is None:
+        return idx, None
 
     # Semaphore limit
     async with sem:
@@ -70,20 +72,20 @@ async def download_gz(
                         return idx, f.read().decode('utf-8')
 
             except RETRYABLE_EXC as e:
-                msg = f"{link_type} {idx}: Retryable error exhausted ({type(e).__name__}\n{e}"
+                msg = f"{idx}: Retryable error exhausted ({type(e).__name__}\n{e}"
                 print(msg)
                 delay = jittered_backoff(attempt)
                 await asyncio.sleep(delay)
 
             except aiohttp.ClientResponseError as e:
-                msg = f"{link_type} {idx}: HTTP {e.status}\n{e.message}"
+                msg = f"{idx}: HTTP {e.status}\n{e.message}"
                 print(msg)
 
             except Exception as e:
-                msg = f"{link_type} {idx}: Unexpected {type(e).__name__}\n{e}"
+                msg = f"{idx}: Unexpected {type(e).__name__}\n{e}"
                 print(msg)
 
-async def process_urls(urls_indexed, link_type):
+async def process_urls(urls_indexed):
 
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     connector = aiohttp.TCPConnector(
@@ -118,7 +120,6 @@ async def process_urls(urls_indexed, link_type):
                     session     = session,
                     max_retries = 3,
                     url_indexed = _url_indexed,
-                    link_type   = link_type
                 )
             )
 
@@ -131,16 +132,30 @@ async def process_urls(urls_indexed, link_type):
 
         return results
 
-async def async_process_urls(df):
+async def async_process_df(df):
 
-    uc, fhr = df["contraction_url"], df["hb_baby_url"]
+    uc, fhr, fmov = df["contraction_url"], df["hb_baby_url"], df["raw_fetal_url"]
 
-    uc_indexed  = [(i,j) for i,j in enumerate(uc)]
-    fhr_indexed = [(i,j) for i,j in enumerate(fhr)]
+    uc_indexed      = [(i,j) for i,j in enumerate(uc)]
+    fhr_indexed     = [(i,j) for i,j in enumerate(fhr)]
+    fmov_indexed    = [(i,j) for i,j in enumerate(fmov)]
 
-    uc_results, fhr_results = await asyncio.gather(
-        process_urls(uc_indexed, "UC"),
-        process_urls(fhr_indexed, "FHR"),
+    uc_results, fhr_results, fmov_results = await asyncio.gather(
+        process_urls(uc_indexed),
+        process_urls(fhr_indexed),
+        process_urls(fmov_indexed)
     )
 
-    return uc_results, fhr_results
+    return uc_results, fhr_results, fmov_results
+
+async def async_process_urls(
+        url_list
+):
+
+    url_indexed = [(i,j) for i,j in enumerate(url_list)]
+
+    results = await asyncio.gather(
+        process_urls(url_indexed),
+    )
+
+    return results[0]

@@ -64,9 +64,19 @@ async def filter(
             # Check if UC/FHR are both >= 20 minutes
             uc_data     = record['uc']
             fhr_data    = record['fhr']
-            if len(uc_data) < 60*20 and len(fhr_data) < 60*20:
+            if len(uc_data) < 60*20 or len(fhr_data) < 60*20:
                 bad_uc_fhr += 1
                 continue
+            else:
+                max_len = max(len(uc_data), len(fhr_data))
+
+                while len(uc_data) < max_len:
+                    uc_data.append(0)
+                while len(fhr_data) < max_len:
+                    fhr_data.append(0)
+
+                record['uc']    = uc_data
+                record['fhr']   = fhr_data
 
             # Check if gestational age is present
             gest_age = record['gest_age']

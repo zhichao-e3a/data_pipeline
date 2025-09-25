@@ -71,6 +71,7 @@ def extract_features(data):
                 "start_test_ts"     : row["start_test_ts"],
                 "uc"                : row["uc"],
                 "fhr"               : row["fhr"],
+                "fmov"              : row["fmov"],
                 "edd"               : row["edd"],
                 "add"               : row["add"],
                 "onset"             : row["onset"],

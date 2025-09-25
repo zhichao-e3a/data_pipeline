@@ -2,7 +2,8 @@ from database.MongoDBConnector import MongoDBConnector
 from database.SQLDBConnector import SQLDBConnector
 from database.queries import *
 
-from utils.data_download import async_process_urls
+from utils.download_data import async_process_df
+from utils.extract_fetal_movement import extract_fetal_movement
 
 from services.shared import log_watermark
 
@@ -84,12 +85,13 @@ async def query(
         #     i["patient_id"]: i["last_menstrual_period"] for i in recruited_patients
         # }
 
-    # UC and FHR measurements not ordered yet
-    uc_results, fhr_results = await async_process_urls(df)
+    # UC, FHR, FMov measurements not ordered yet
+    uc_results, fhr_results, fmov_results = await async_process_df(df)
 
     # Order UC and FHR measurements
-    sorted_uc_list  = sorted(uc_results, key=lambda x: x[0])
-    sorted_fhr_list = sorted(fhr_results, key=lambda x: x[0])
+    sorted_uc_list      = sorted(uc_results, key=lambda x: x[0])
+    sorted_fhr_list     = sorted(fhr_results, key=lambda x: x[0])
+    sorted_fmov_list    = sorted(fmov_results, key=lambda x: x[0])
 
     record_list = []
     for idx, row in df.iterrows():
@@ -103,9 +105,20 @@ async def query(
         start_test_ts   = datetime.fromtimestamp(int(row['start_test_ts']))\
             .strftime("%Y-%m-%d %H:%M:%S") if row['start_test_ts'] else None
 
-        # Do not filter by < 20 minutes yet
+        # Extract UC, FHR data ; Do not filter by < 20 minutes yet
         uc_data     = sorted_uc_list[idx][1].split("\n")
         fhr_data    = sorted_fhr_list[idx][1].split("\n")
+
+        # Extract FMov data
+        max_len         = max(len(uc_data), len(fhr_data))
+        raw_fmov_data   = sorted_fmov_list[idx][1].split("\n") if sorted_fmov_list[idx][1] else None
+
+        if raw_fmov_data is None:
+            fmov_data = None
+        else:
+            fmov_data = await anyio.to_thread.run_sync(
+                lambda : extract_fetal_movement(raw_fmov_data, m_date, max_len)
+            )
 
         # Handle gestational age
         gest_age        = None
@@ -178,6 +191,7 @@ async def query(
             'start_test_ts'     : start_test_ts,
             'uc'                : uc_data,
             'fhr'               : fhr_data,
+            'fmov'              : fmov_data,
             'edd'               : edd,
             'add'               : add,
             'gest_age'          : gest_age

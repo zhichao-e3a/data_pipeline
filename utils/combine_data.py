@@ -37,6 +37,7 @@ def combine_data(measurements, patients):
             "start_test_ts"     : row["start_test_ts"],
             "uc"                : row["uc"],
             "fhr"               : row["fhr"],
+            "fmov"              : row["fmov"],
             "gest_age"          : row["gest_age"],
 
             # Use expected and actual delivery from 'patients_unified'

@@ -1,9 +1,30 @@
+from core import states
+
 from database.MongoDBConnector import MongoDBConnector
 
-from utils.combine_data import combine_data
+from utils.combine_data import combine_data_onset, combine_data_add
 from utils.extract_features import extract_features
 
 import anyio
+import asyncio
+
+from itertools import islice
+from typing import List, Dict, Any, Iterable
+
+def _chunks(
+
+        seq: List[Dict[str, Any]],
+        size: int
+
+) -> Iterable[List[Dict[str, Any]]]:
+
+    it = iter(seq)
+
+    while True:
+        block = list(islice(it, size))
+        if not block:
+            break
+        yield block
 
 async def model_raw(
         mongo : MongoDBConnector
@@ -12,11 +33,8 @@ async def model_raw(
     all_patients = await mongo.get_all_documents(coll_name="patients_unified")
 
     rec_patients, hist_patients = [], []
-    valid_patients = 0
     for patient in all_patients:
 
-        onset       = patient["onset_datetime"]
-        delivery    = patient["delivery_type"]
         origin      = patient["recruitment_type"]
 
         if origin == "recruited":
@@ -25,50 +43,83 @@ async def model_raw(
         elif origin == "historical":
             hist_patients.append(patient)
 
-        # Include only patients with onset and natural/emergency c-section deliveries
-        if onset is not None and delivery != "c-section":
-            valid_patients += 1
-
     rec_measurements = await mongo.get_all_documents(
-        coll_name="filt_rec",
-        query={
-            "mobile": {
-                "$in": [i["patient_id"] for i in rec_patients]
-            }
-        }
+        coll_name="filt_rec"
     )
 
     hist_measurements = await mongo.get_all_documents(
-        coll_name="filt_hist",
-        query={
-            "mobile": {
-                "$in": [i["patient_id"] for i in hist_patients]
-            }
-        }
+        coll_name="filt_hist"
     )
 
-    rec_data, rec_skipped   = await anyio.to_thread.run_sync(
-        lambda : combine_data(rec_measurements, rec_patients)
+    rec_add = await anyio.to_thread.run_sync(
+        lambda: combine_data_add(
+            rec_measurements
+        )
     )
 
-    hist_data, hist_skipped = await anyio.to_thread.run_sync(
-        lambda : combine_data(hist_measurements, hist_patients)
+    rec_onset = await anyio.to_thread.run_sync(
+        lambda : combine_data_onset(
+            [
+                i for i in rec_measurements if i["mobile"] in [j["patient_id"] for j in rec_patients]
+            ],
+            rec_patients
+        )
     )
 
-    extracted_data = await anyio.to_thread.run_sync(
-        lambda : extract_features(rec_data+hist_data)
+    hist_onset = await anyio.to_thread.run_sync(
+        lambda : combine_data_onset(
+            [
+                i for i in hist_measurements if i["mobile"] in [j["patient_id"] for j in hist_patients]
+            ],
+            hist_patients
+        )
+    )
+
+    onset_records   = rec_onset + hist_onset
+    add_records     = rec_add + hist_measurements
+
+    loop    = asyncio.get_running_loop()
+    chunk   = 5000
+    async def _proc_map(
+
+            records: List[Dict[str, Any]],
+            kind: str
+
+    ) -> List[Dict[str, Any]]:
+
+        futures = [
+            loop.run_in_executor(states.PROC_POOL, extract_features, c, kind)
+            for c in _chunks(records, chunk)
+        ]
+
+        results: List[Dict[str, Any]] = []
+
+        for fut in asyncio.as_completed(futures):
+            part = await fut
+            if part:
+                results.extend(part)
+
+        return results
+
+    try:
+        extracted_onset, extracted_add = await asyncio.gather(
+            _proc_map(onset_records, "onset"),
+            _proc_map(add_records, "add"),
+        )
+    except asyncio.CancelledError:
+        raise
+
+    await mongo.upsert_documents_hashed(
+        extracted_onset,
+        coll_name="model_data_onset"
     )
 
     await mongo.upsert_documents_hashed(
-        extracted_data,
-        coll_name="model_data_raw"
+        extracted_add,
+        coll_name="model_data_add",
     )
 
     return {
-        "rec_patients"          : len(rec_patients),
-        "hist_patients"         : len(hist_patients),
-        "valid_patients"        : valid_patients,
-        "valid_measurements"    : len(rec_data)+len(hist_data),
-        "no_onset"              : rec_skipped["no_onset"] + hist_skipped["no_onset"],
-        "c_sections"            : rec_skipped["c_section"] + hist_skipped["c_section"]
+        "n_onset"   : len(extracted_onset),
+        "n_add"     : len(extracted_add)
     }

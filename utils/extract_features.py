@@ -45,7 +45,7 @@ def compute_fhr_baseline(fhr, fs=1, cutoff=0.005):
 
     return baseline
 
-def extract_features(data):
+def extract_features(data, target: str):
 
     extracted = []
 
@@ -63,23 +63,25 @@ def extract_features(data):
         # Sample Entropy
         sample_ent = float(nk.entropy_sample(uc, dimension=2, r=0.2 * np.std(uc))[0])
 
-        extracted.append(
-            {
-                "_id"               : row["_id"],
-                "mobile"            : row["mobile"],
-                "measurement_date"  : row["measurement_date"],
-                "start_test_ts"     : row["start_test_ts"],
-                "uc"                : row["uc"],
-                "fhr"               : row["fhr"],
-                "fmov"              : row["fmov"],
-                "edd"               : row["edd"],
-                "add"               : row["add"],
-                "onset"             : row["onset"],
-                "gest_age"          : row["gest_age"],
-                "total_auc"         : total_auc,
-                "baseline_tone"     : baseline_tone,
-                "sample_entropy"    : sample_ent
-            }
-        )
+        data = {
+            "_id"               : row["_id"],
+            "mobile"            : row["mobile"],
+            "measurement_date"  : row["measurement_date"],
+            "start_test_ts"     : row["start_test_ts"],
+            "uc"                : row["uc"],
+            "fhr"               : row["fhr"],
+            "fmov"              : row["fmov"],
+            "edd"               : row["edd"],
+            "add"               : row["add"],
+            "gest_age"          : row["gest_age"],
+            "total_auc"         : total_auc,
+            "baseline_tone"     : baseline_tone,
+            "sample_entropy"    : sample_ent
+        }
+
+        if target == "onset":
+            data["onset"] = row["onset"]
+
+        extracted.append(data)
 
     return extracted

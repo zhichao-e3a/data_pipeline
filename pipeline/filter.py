@@ -2,6 +2,10 @@ from database.MongoDBConnector import MongoDBConnector
 
 from services.shared import log_watermark
 
+from utils.extract_fetal_movement import extract_fetal_movement
+
+import anyio
+
 from typing import Dict
 
 async def filter(
@@ -71,12 +75,23 @@ async def filter(
                 max_len = max(len(uc_data), len(fhr_data))
 
                 while len(uc_data) < max_len:
-                    uc_data.append(0)
+                    uc_data.append("0")
                 while len(fhr_data) < max_len:
-                    fhr_data.append(0)
+                    fhr_data.append("0")
+
+                fmov_data = await anyio.to_thread.run_sync(
+                    lambda: extract_fetal_movement(record['fmov'], record['measurement_date'], max_len)
+                ) if record['fmov'] else None
+
+                if fmov_data:
+                    if fmov_data[1] > max_len:
+                        while len(uc_data) != fmov_data[1] and len(fhr_data) != fmov_data[1]:
+                            uc_data.append("0")
+                            fhr_data.append("0")
 
                 record['uc']    = uc_data
                 record['fhr']   = fhr_data
+                record['fmov']  = fmov_data[0] if fmov_data else None
 
             # Check if gestational age is present
             gest_age = record['gest_age']

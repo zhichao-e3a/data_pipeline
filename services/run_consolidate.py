@@ -94,24 +94,16 @@ async def run_consolidate(
                 msg = "task_start"
             )
             placeholder = {
-                "rec_patients"          : None,
-                "hist_patients"         : None,
-                "valid_patients"        : None,
-                "valid_measurements"    : None,
-                "no_onset"              : None,
-                "c_sections"            : None
+                "n_onset"   : None,
+                "n_add"     : None
             }
             with time_block(
                 lambda ms: tlog.info(
                     msg     = "task_end",
                     extra   = {
-                        "duration"            : ms,
-                        "rec_patients"        : placeholder["rec_patients"],
-                        "hist_patients"       : placeholder["hist_patients"],
-                        "valid_patients"      : placeholder["valid_patients"],
-                        "valid_measurements"  : placeholder["valid_measurements"],
-                        "no_onset"            : placeholder["no_onset"],
-                        "c_sections"          : placeholder["c_sections"]
+                        "duration"  : ms,
+                        "n_onset"   : placeholder["n_onset"],
+                        "n_add"     : placeholder["n_add"]
                     }
                 )
             ):
@@ -130,25 +122,17 @@ async def run_consolidate(
                     mongo = mongo
                 )
 
-                rec_patients        = metadata_1["rec_patients"]
-                hist_patients       = metadata_1["hist_patients"]
-                valid_patients      = metadata_1["valid_patients"]
-                valid_measurements  = metadata_1["valid_measurements"]
-                no_onset            = metadata_1["no_onset"]
-                c_sections          = metadata_1["c_sections"]
+                n_onset = metadata_1["n_onset"]
+                n_add   = metadata_1["n_add"]
 
-                placeholder["rec_patients"]         = rec_patients
-                placeholder["hist_patients"]        = hist_patients
-                placeholder["valid_patients"]       = valid_patients
-                placeholder["valid_measurements"]   = valid_measurements
-                placeholder["no_onset"]             = no_onset
-                placeholder["c_sections"]           = c_sections
+                placeholder["n_onset"]  = n_onset
+                placeholder["n_add"]    = n_add
 
                 curr += 1
                 end = time.perf_counter()
                 total_time += end-start
 
-                message = f":material/groups: {rec_patients} RECRUITED PATIENTS"
+                message = f":material/groups: {n_onset} MEASUREMENTS WITH ONSET"
                 set_progress(
                     job_id,
                     progress=round((curr / steps) * 100),
@@ -156,31 +140,7 @@ async def run_consolidate(
                     state=None
                 )
 
-                message = f":material/groups: {hist_patients} HISTORICAL PATIENTS"
-                set_progress(
-                    job_id,
-                    progress=round((curr / steps) * 100),
-                    message=message,
-                    state=None
-                )
-
-                message = f":material/sentiment_satisfied: {valid_patients} VALID PATIENTS (ONSET, NON C-SECTIONS)"
-                set_progress(
-                    job_id,
-                    progress=round((curr / steps) * 100),
-                    message=message,
-                    state=None
-                )
-
-                message = f":material/person_alert: SKIPPED {no_onset} DUE TO NO ONSET DATE"
-                set_progress(
-                    job_id,
-                    progress=round((curr / steps) * 100),
-                    message=message,
-                    state=None
-                )
-
-                message = f":material/person_alert: SKIPPED {c_sections} DUE TO C-SECTION"
+                message = f":material/groups: {n_add} MEASUREMENTS WITH ADD"
                 set_progress(
                     job_id,
                     progress=round((curr / steps) * 100),

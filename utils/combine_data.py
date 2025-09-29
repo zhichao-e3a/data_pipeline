@@ -1,11 +1,8 @@
 import pandas as pd
 
-def combine_data(measurements, patients):
+def combine_data_onset(measurements, patients):
 
-    skipped = {
-        "no_onset"  : 0,
-        "c_section" : 0
-    }
+    # Accounts for ONSET and DELIVERY TYPE (both found in unified)
 
     measurements_df = pd.DataFrame(measurements)
     patients_df     = pd.DataFrame(patients)
@@ -18,35 +15,46 @@ def combine_data(measurements, patients):
         how         = "left"
     )
 
-    combined_data = []
+    combined_data_onset = []
 
     for idx, row in merged.iterrows():
 
-        if not row["onset_datetime"]:
-            skipped["no_onset"] += 1
-            continue
+        onset       = row["onset_datetime"]
+        delivery    = row["delivery_type"]
 
-        if row["delivery_type"] == "c-section":
-            skipped["c_section"] += 1
-            continue
+        # If there is onset datetime and delivery is not a c-section
+        if onset and delivery != "c-section":
 
-        data = {
-            "_id"               : row["_id_x"],
-            "mobile"            : row["mobile"],
-            "measurement_date"  : row["measurement_date"],
-            "start_test_ts"     : row["start_test_ts"],
-            "uc"                : row["uc"],
-            "fhr"               : row["fhr"],
-            "fmov"              : row["fmov"],
-            "gest_age"          : row["gest_age"],
+            data = {
+                "_id"               : row["_id_x"],  # filt
+                "mobile"            : row["mobile"],  # filt
+                "measurement_date"  : row["measurement_date"],  # filt
+                "start_test_ts"     : row["start_test_ts"],  # filt
+                "uc"                : row["uc"],  # filt
+                "fhr"               : row["fhr"],  # filt
+                "fmov"              : row["fmov"],  # filt
+                "gest_age"          : row["gest_age"],  # filt
+                "edd"               : row["edd"],  # filt
+                "add"               : row["add"],  # filt
+                "onset"             : onset
+            }
 
-            # Use expected and actual delivery from 'patients_unified'
-            "edd"               : row["edd"] if row["recruitment_type"] == "historical" else row["estimated_delivery_date"],
-            "add"               : row["add"] if row["recruitment_type"] == "historical" else row["delivery_datetime"],
+            combined_data_onset.append(data)
 
-            "onset"             : row["onset_datetime"]
-        }
+    return combined_data_onset
 
-        combined_data.append(data)
+def combine_data_add(measurements):
 
-    return combined_data, skipped
+    # Accounts for ADD only ; does not account for delivery type
+
+    combined_data_add = []
+
+    for row in measurements:
+
+        add = row["add"]
+
+        if add:
+
+            combined_data_add.append(row)
+
+    return combined_data_add

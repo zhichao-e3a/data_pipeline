@@ -169,6 +169,9 @@ class MongoDBConnector:
                 k:v for k,v in obj.items() if k in {
                     "edd",
                     "add",
+                    "uc",
+                    "fhr",
+                    "fmov"
                     "onset",
                     "annotations",
                     "notes"

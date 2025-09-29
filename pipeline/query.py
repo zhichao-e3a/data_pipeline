@@ -3,7 +3,6 @@ from database.SQLDBConnector import SQLDBConnector
 from database.queries import *
 
 from utils.download_data import async_process_df
-from utils.extract_fetal_movement import extract_fetal_movement
 
 from services.shared import log_watermark
 
@@ -109,16 +108,8 @@ async def query(
         uc_data     = sorted_uc_list[idx][1].split("\n")
         fhr_data    = sorted_fhr_list[idx][1].split("\n")
 
-        # Extract FMov data
-        max_len         = max(len(uc_data), len(fhr_data))
-        raw_fmov_data   = sorted_fmov_list[idx][1].split("\n") if sorted_fmov_list[idx][1] else None
-
-        if raw_fmov_data is None:
-            fmov_data = None
-        else:
-            fmov_data = await anyio.to_thread.run_sync(
-                lambda : extract_fetal_movement(raw_fmov_data, m_date, max_len)
-            )
+        # Extract raw FMov data
+        raw_fmov_data = sorted_fmov_list[idx][1].split("\n") if sorted_fmov_list[idx][1] else None
 
         # Handle gestational age
         gest_age        = None
@@ -191,7 +182,7 @@ async def query(
             'start_test_ts'     : start_test_ts,
             'uc'                : uc_data,
             'fhr'               : fhr_data,
-            'fmov'              : fmov_data,
+            'fmov'              : raw_fmov_data,
             'edd'               : edd,
             'add'               : add,
             'gest_age'          : gest_age

@@ -8,7 +8,7 @@ def extract_fetal_movement(raw_fmov, start_ts, length):
     for _fmov in raw_fmov:
 
         fmov_unix   = int(_fmov.split('：')[1].split(' ')[0])
-        fmov_deg    = int(_fmov.split('：')[2])
+        fmov_deg    = _fmov.split('：')[2]
         fmov_dt     = datetime.fromtimestamp(fmov_unix)
         idx         = fmov_dt - start_dt
         idx_s       = idx.seconds
@@ -28,7 +28,7 @@ def extract_fetal_movement(raw_fmov, start_ts, length):
         curr = fmov_idx[pointer]
 
         if counter != curr[0]:
-            record.append(0)
+            record.append("0")
         else:
             record.append(curr[1])
             pointer += 1
@@ -37,6 +37,6 @@ def extract_fetal_movement(raw_fmov, start_ts, length):
 
     while len(record) < length:
 
-        record.append(0)
+        record.append("0")
 
-    return record
+    return record, len(record)

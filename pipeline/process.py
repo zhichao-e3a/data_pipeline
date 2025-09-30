@@ -21,6 +21,10 @@ async def process(
             "_id": {
                 "$eq": f"filt_{origin}"
             },
+        },
+        projection = {
+            "_id"        : 0,
+            "last_utime" : 1
         }
     )
 
@@ -33,6 +37,10 @@ async def process(
                 'utime': {
                     '$gt': last_utime,
                 }
+            },
+            projection = {
+                "ctime"     : 0,
+                "doc_hash"  : 0
             },
             sort=[
                 ("utime", 1),
@@ -47,6 +55,10 @@ async def process(
                 'utime': {
                     '$gt': last_utime,
                 }
+            },
+            projection = {
+                "ctime"     : 0,
+                "doc_hash"  : 0
             },
             sort=[
                 ("utime", 1),

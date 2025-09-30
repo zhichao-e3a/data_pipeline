@@ -21,7 +21,11 @@ async def filter(
         query={
             "_id": {
                 "$eq": f"raw_{origin}"
-            },
+            }
+        },
+        projection = {
+            "_id"        : 0,
+            "last_utime" : 1
         }
     )
 
@@ -34,6 +38,10 @@ async def filter(
                 'utime': {
                     '$gt': last_utime,
                 }
+            },
+            projection = {
+                "ctime"     : 0,
+                "doc_hash"  : 0
             },
             sort = [
                 ("utime", 1),
@@ -48,6 +56,10 @@ async def filter(
                 'utime': {
                     '$gt': last_utime,
                 }
+            },
+            projection={
+                "ctime"     : 0,
+                "doc_hash"  : 0
             },
             sort = [
                 ("utime", 1),

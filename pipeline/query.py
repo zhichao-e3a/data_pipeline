@@ -3,10 +3,10 @@ from database.SQLDBConnector import SQLDBConnector
 from database.queries import *
 
 from utils.download_data import async_process_df
+from utils.extract_gest_age import extract_gest_age
 
 from services.shared import log_watermark
 
-import json
 import anyio
 import pandas as pd
 from datetime import datetime
@@ -26,7 +26,11 @@ async def query(
         query = {
             "_id" : {
                 "$eq" : f"sql_{origin}"
-            },
+            }
+        },
+        projection = {
+            "_id"        : 0,
+            "last_utime" : 1
         }
     )
 
@@ -36,8 +40,7 @@ async def query(
     if origin == "hist":
         df = await anyio.to_thread.run_sync(
             lambda: sql.query_to_dataframe(
-                query = HISTORICAL\
-                   .format(
+                query = HISTORICAL.format(
                    last_utime = last_utime
                )
             )
@@ -45,17 +48,21 @@ async def query(
     # Recruited patients
     elif origin == "rec":
         # Query existing Recruited patients from MongoDB
-        recruited_patients = await mongo.get_all_documents(
+        recruited_mobile = await mongo.get_all_documents(
             coll_name = "patients_unified",
             query = {
                 'recruitment_type' : 'recruited'
+            },
+            projection = {
+                '_id'        : 0,
+                'patient_id' : 1,
             }
         )
 
         # Get mobile numbers of recruited patients
         query_string = ",".join(
             [
-                f"'{i["patient_id"]}'" for i in recruited_patients
+                f"'{i["patient_id"]}'" for i in recruited_mobile
             ]
         )
 
@@ -70,14 +77,14 @@ async def query(
             )
         )
 
-        # Get data for EDD, ADD, LMP
-        expected_delivery = {
-            i["patient_id"]: i["estimated_delivery_date"] for i in recruited_patients
-        }
-
-        actual_delivery = {
-            i["patient_id"]: i["delivery_datetime"] for i in recruited_patients
-        }
+        # # Get data for EDD, ADD, LMP
+        # expected_delivery = {
+        #     i["patient_id"]: i["estimated_delivery_date"] for i in recruited_patients
+        # }
+        #
+        # actual_delivery = {
+        #     i["patient_id"]: i["delivery_datetime"] for i in recruited_patients
+        # }
 
         # [18 Sep] Not using LMP to obtain gest_age
         # last_menstrual = {
@@ -111,35 +118,21 @@ async def query(
         # Extract raw FMov data
         raw_fmov_data = sorted_fmov_list[idx][1].split("\n") if sorted_fmov_list[idx][1] else None
 
-        # Handle gestational age
-        gest_age        = None
-        conclusion      = row['conclusion']
-        basic_info      = row['basic_info']
-        basic_info_json = json.loads(basic_info)
+        # Extract gestational age
+        conclusion = row['conclusion'] ; basic_info = row['basic_info']
+        gest_age = extract_gest_age(conclusion, basic_info)
 
-        # Check if gest_age can be obtained from 'basic_info' field
-        if basic_info_json["setPregTime"]:
-
-            gest_string = basic_info_json["pregTime"]
-
-            digits = [int(c) for c in gest_string if c.isdigit()]
-
-            if len(digits) == 3:
-                gest_age = digits[0] * 10 * 7 + digits[1] * 7 + digits[2]
-            elif len(digits) == 2:
-                gest_age = digits[0] * 10 * 7 + digits[1] * 7
-
-        # If 'conclusion' field available and gest_age still not found
-        if conclusion and not gest_age:
-
-            gest_string = conclusion.split("。")[0]
-
-            digits = [int(c) for c in gest_string if c.isdigit()]
-
-            if len(digits) == 3:
-                gest_age = digits[0] * 10 * 7 + digits[1] * 7 + digits[2]
-            elif len(digits) == 2:
-                gest_age = digits[0] * 10 * 7 + digits[1] * 7
+        # Build record (gest_age can be NULL, UC/FHR can be < 20 minutes)
+        record = {
+            '_id': row_id,
+            'mobile': mobile,
+            'measurement_date': m_date,
+            'start_test_ts': start_test_ts,
+            'uc': uc_data,
+            'fhr': fhr_data,
+            'fmov': raw_fmov_data,
+            'gest_age': gest_age
+        }
 
         # Handle EDD, ADD for historical patients
         if origin == 'hist':
@@ -149,14 +142,17 @@ async def query(
             add = datetime.fromtimestamp(int(row['end_born_ts'])) \
                 .strftime("%Y-%m-%d %H:%M:%S")
 
+            record['edd'] = edd
+            record['add'] = add
+
         # Handle EDD, ADD, gest_age for recruited patients
         # [18 Sep] Not using LMP to obtain gest_age
-        elif origin == 'rec':
-
-            edd = datetime.strptime(expected_delivery[mobile], "%Y-%m-%d") \
-                .strftime("%Y-%m-%d %H:%M:%S") if expected_delivery[mobile] else None
-
-            add = actual_delivery[mobile]
+        # elif origin == 'rec':
+        #
+        #     edd = datetime.strptime(expected_delivery[mobile], "%Y-%m-%d") \
+        #         .strftime("%Y-%m-%d %H:%M:%S") if expected_delivery[mobile] else None
+        #
+        #     add = actual_delivery[mobile]
 
             # gest_age
             # last_menstrual_str = last_menstrual[mobile]
@@ -168,25 +164,6 @@ async def query(
             #            - last_menstrual_date
             #
             #     gest_age = diff.days
-
-        else:
-            # Will not reach here unless origin argument wrong
-            edd = None
-            add = None
-
-        # Build record (gest_age can be NULL, UC/FHR can be < 20 minutes)
-        record = {
-            '_id'               : row_id,
-            'mobile'            : mobile,
-            'measurement_date'  : m_date,
-            'start_test_ts'     : start_test_ts,
-            'uc'                : uc_data,
-            'fhr'               : fhr_data,
-            'fmov'              : raw_fmov_data,
-            'edd'               : edd,
-            'add'               : add,
-            'gest_age'          : gest_age
-        }
 
         record_list.append(record)
 

@@ -275,3 +275,10 @@ class MongoDBConnector:
                 await asyncio.sleep(0.5)
                 res = await coll.delete_one(query)
                 return res.deleted_count
+
+    async def delete_all_documents(self, coll_name, query={}):
+
+        async with self.resource(coll_name) as coll:
+
+            result = await coll.delete_many(query)
+            return result.deleted_count

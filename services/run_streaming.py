@@ -10,33 +10,15 @@ import pyarrow.ipc as ipc
 
 mongo = MongoDBConnector(mode=os.getenv("MODE"))
 
-def build_array(col_vals, typ):
-
-    return pa.array(col_vals, type=typ, from_pandas=True)
-
-def pivot_to_table(rows, schema):
-
-    arrays = [] ; names = []
-
-    for field in schema:
-
-        f_name, f_type = field.name, field.type
-
-        col_vals = [r[f_name] for r in rows]
-
-        arr = build_array(col_vals, f_type)
-
-        arrays.append(arr)
-        names.append(f_name)
-
-    return pa.Table.from_arrays(arrays, names=names)
-
 async def run_streaming(coll_name: str):
 
     bio      = io.BytesIO()
     sink     = pa.output_stream(bio)
     schema   = schema_add if coll_name == "model_data_add" else schema_onset
     writer   = ipc.new_stream(sink, schema)
+
+    sink.flush()
+
     last_len = 0
 
     bio.seek(last_len)
@@ -50,8 +32,11 @@ async def run_streaming(coll_name: str):
                 coll_name = coll_name
         ):
 
-            table = pivot_to_table(batch, schema)
-            writer.write_table(table)
+            record_batch = pa.RecordBatch.from_pylist(batch, schema=schema)
+
+            writer.write_batch(record_batch)
+
+            sink.flush()
 
             bio.seek(last_len)
             chunk = bio.read()
@@ -74,6 +59,7 @@ async def run_streaming(coll_name: str):
             print(e)
             pass
 
+        sink.flush()
         bio.seek(last_len)
         tail = bio.read()
 

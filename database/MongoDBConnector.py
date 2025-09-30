@@ -58,7 +58,7 @@ class MongoDBConnector:
             query       : Optional[Dict[str, Any]] = {},
             projection  : Optional[Dict[str, int]] = None,
             sort        : Optional[List[Tuple[str, int]]] = None,
-            batch_size  : Optional[int] = 10_000
+            batch_size  : Optional[int] = 20_000
 
     ) -> AsyncIterator[List[Dict[str, Any]]]:
 
@@ -182,7 +182,7 @@ class MongoDBConnector:
                     "add",
                     "uc",
                     "fhr",
-                    "fmov"
+                    "fmov",
                     "onset",
                     "annotations",
                     "notes"

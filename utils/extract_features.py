@@ -45,7 +45,7 @@ def compute_fhr_baseline(fhr, fs=1, cutoff=0.005):
 
     return baseline
 
-def extract_features(data, target: str):
+def extract_features(data, kind):
 
     extracted = []
 
@@ -63,7 +63,7 @@ def extract_features(data, target: str):
         # Sample Entropy
         sample_ent = float(nk.entropy_sample(uc, dimension=2, r=0.2 * np.std(uc))[0])
 
-        data = {
+        record = {
             "_id"               : row["_id"],
             "mobile"            : row["mobile"],
             "measurement_date"  : row["measurement_date"],
@@ -71,17 +71,17 @@ def extract_features(data, target: str):
             "uc"                : row["uc"],
             "fhr"               : row["fhr"],
             "fmov"              : row["fmov"],
-            "edd"               : row["edd"],
-            "add"               : row["add"],
             "gest_age"          : row["gest_age"],
+            "add"               : row["add"],
+            "edd"               : row["edd"],
             "total_auc"         : total_auc,
             "baseline_tone"     : baseline_tone,
             "sample_entropy"    : sample_ent
         }
 
-        if target == "onset":
-            data["onset"] = row["onset"]
+        if kind == "onset":
+            record["onset"] = row["onset"]
 
-        extracted.append(data)
+        extracted.append(record)
 
     return extracted

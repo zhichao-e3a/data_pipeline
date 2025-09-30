@@ -5,7 +5,6 @@ from core import states
 from database.MongoDBConnector import MongoDBConnector
 
 from pipeline.model_raw import model_raw
-from pipeline.model_raw_excl import model_raw_excl
 
 from services.notifier import set_progress
 from services.shared import check_cancel
@@ -56,7 +55,6 @@ async def run_consolidate(
         job_id: str
 ) -> None:
 
-    steps       = 2
     curr        = 0
     total_time  = 0
 
@@ -135,7 +133,7 @@ async def run_consolidate(
                 message = f":material/groups: {n_onset} MEASUREMENTS WITH ONSET"
                 set_progress(
                     job_id,
-                    progress=round((curr / steps) * 100),
+                    progress=None,
                     message=message,
                     state=None
                 )
@@ -143,68 +141,9 @@ async def run_consolidate(
                 message = f":material/groups: {n_add} MEASUREMENTS WITH ADD"
                 set_progress(
                     job_id,
-                    progress=round((curr / steps) * 100),
+                    progress=None,
                     message=message,
                     state=None
-                )
-            ######################################## FILTER ########################################
-            tlog = Ctx(
-                logger = logger.getChild("filter"),
-                extra = {
-                    "job_id"        : job_id,
-                    "data_origin"   : "all",
-                    "task"          : "filter",
-                    "task_n"        : curr
-                }
-            )
-            tlog.info(
-                msg = "task_start"
-            )
-            placeholder = {
-                "rows_remaining": None,
-                "rows_removed": None,
-            }
-            with time_block(
-                    lambda ms: tlog.info(
-                        msg = "task_end",
-                        extra = {
-                            "duration"          : ms,
-                            "rows_remaining"    : placeholder["rows_remaining"],
-                            "rows_removed"      : placeholder["rows_removed"],
-                        }
-                    )
-            ):
-                start = time.perf_counter()
-                check_cancel(job_id)
-
-                message = ":material/conveyor_belt: FILTERING MEASUREMENTS"
-                set_progress(
-                    job_id,
-                    progress = None,
-                    message = message,
-                    state = None
-                )
-
-                metadata_2 = await model_raw_excl(
-                    mongo = mongo
-                )
-
-                rows_remaining  = metadata_2["n_rows"]
-                rows_removed    = metadata_2["rows_skipped"]
-
-                placeholder["rows_remaining"]   = rows_remaining
-                placeholder["rows_removed"]     = rows_removed
-
-                end = time.perf_counter()
-                curr += 1
-                total_time += end-start
-
-                message = f":material/done_outline: [{end-start:.2f} s] {rows_remaining} ROWS (FILTERED {rows_removed} ROWS)"
-                set_progress(
-                    job_id,
-                    progress = round((curr/steps)*100),
-                    message = message,
-                    state = None
                 )
 
             message = f":material/done_outline: PIPELINE FINISHED IN {total_time:.2f} s"

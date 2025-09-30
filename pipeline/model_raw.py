@@ -2,7 +2,7 @@ from core import states
 
 from database.MongoDBConnector import MongoDBConnector
 
-from utils.combine_data import combine_data_onset, combine_data_add
+from utils.combine_data import combine_data
 from utils.extract_features import extract_features
 
 import anyio
@@ -30,12 +30,23 @@ async def model_raw(
         mongo : MongoDBConnector
 ):
 
-    all_patients = await mongo.get_all_documents(coll_name="patients_unified")
+    all_patients = await mongo.get_all_documents(
+        coll_name="patients_unified",
+        projection = {
+            "_id"                       : 0,
+            "patient_id"                : 1,
+            "delivery_datetime"         : 1,
+            "delivery_type"             : 1,
+            "estimated_delivery_date"   : 1,
+            "onset_datetime"            : 1,
+            "recruitment_type"          : 1
+        }
+    )
 
     rec_patients, hist_patients = [], []
     for patient in all_patients:
 
-        origin      = patient["recruitment_type"]
+        origin = patient["recruitment_type"]
 
         if origin == "recruited":
             rec_patients.append(patient)
@@ -43,43 +54,49 @@ async def model_raw(
         elif origin == "historical":
             hist_patients.append(patient)
 
+    # Handle Recruited data
+
     rec_measurements = await mongo.get_all_documents(
-        coll_name="filt_rec"
+        coll_name="filt_rec",
+        projection={
+            "ctime"     : 0,
+            "utime"     : 0,
+            "doc_hash"  : 0
+        }
     )
+
+    rec_add, rec_onset = await anyio.to_thread.run_sync(
+        lambda: combine_data(
+            rec_measurements,
+            rec_patients,
+            'rec'
+        )
+    )
+
+    # Handle Historical data
 
     hist_measurements = await mongo.get_all_documents(
-        coll_name="filt_hist"
+        coll_name="filt_hist",
+        projection={
+            "ctime"     : 0,
+            "utime"     : 0,
+            "doc_hash"  : 0
+        }
     )
 
-    rec_add = await anyio.to_thread.run_sync(
-        lambda: combine_data_add(
-            rec_measurements
-        )
-    )
-
-    rec_onset = await anyio.to_thread.run_sync(
-        lambda : combine_data_onset(
-            [
-                i for i in rec_measurements if i["mobile"] in [j["patient_id"] for j in rec_patients]
-            ],
-            rec_patients
-        )
-    )
-
-    hist_onset = await anyio.to_thread.run_sync(
-        lambda : combine_data_onset(
-            [
-                i for i in hist_measurements if i["mobile"] in [j["patient_id"] for j in hist_patients]
-            ],
-            hist_patients
+    hist_add, hist_onset = await anyio.to_thread.run_sync(
+        lambda : combine_data(
+            hist_measurements,
+            hist_patients,
+            'hist'
         )
     )
 
     onset_records   = rec_onset + hist_onset
-    add_records     = rec_add + hist_measurements
+    add_records     = rec_add + hist_add
 
     loop    = asyncio.get_running_loop()
-    chunk   = 5000
+    chunk   = 3000
     async def _proc_map(
 
             records: List[Dict[str, Any]],
@@ -103,8 +120,8 @@ async def model_raw(
 
     try:
         extracted_onset, extracted_add = await asyncio.gather(
-            _proc_map(onset_records, "onset"),
-            _proc_map(add_records, "add"),
+            _proc_map(onset_records, 'onset'),
+            _proc_map(add_records, 'add'),
         )
     except asyncio.CancelledError:
         raise

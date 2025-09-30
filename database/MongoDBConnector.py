@@ -117,21 +117,32 @@ class MongoDBConnector:
                 finally:
                     await cursor.close()
 
-    async def get_all_documents(self, coll_name, query={}, projection=None, batch_size=1000):
+    async def get_all_documents(
+
+            self,
+            coll_name: str,
+            query: Optional[Dict[str, Any]] = None,
+            projection: Optional[Dict[str, int]] = None,
+            batch_size: Optional[int] = 1000
+
+    ):
+
+        query       = query or {}
 
         async with self.resource(coll_name) as coll:
 
             try:
 
-                cursor = coll.find(query)
+                cursor = coll.find(query, projection=projection)
 
                 if batch_size:
                     cursor = cursor.batch_size(batch_size)
+
                 return [doc async for doc in cursor]
 
             except AutoReconnect:
                 await asyncio.sleep(0.5)
-                cursor = coll.find({}, projection)
+                cursor = coll.find({}, projection=projection)
                 if batch_size:
                     cursor = cursor.batch_size(batch_size)
                 return [doc async for doc in cursor]
